@@ -11,7 +11,7 @@ schema_version: "1.0.0"
 name: "standard-governance"
 version: "1.0.0"
 description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks, H4 control policies, contract templates, JSON schemas."
-maintainer: "Dau Sy Manh <manhds@fpt.com>"
+maintainer: "Dau Sy Manh <manhds@>"
 
 provides:
   agents:

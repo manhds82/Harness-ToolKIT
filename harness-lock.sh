@@ -6,7 +6,7 @@
 # HONESTY (C10): gates the uninstall SCRIPT + audits; not an OS lock. Pair with
 # CODEOWNERS + branch protection on .harness/** for merge-time enforcement.
 #
-#   ./harness-lock.sh --target <project> --action set    --pm "Dau Sy Manh <manhds@fpt.com>"
+#   ./harness-lock.sh --target <project> --action set    --pm "Dau Sy Manh <manhds@>"
 #   ./harness-lock.sh --target <project> --action status
 #   ./harness-lock.sh --target <project> --action clear   [--approval-code <c>]
 set -euo pipefail

@@ -6,7 +6,7 @@ guardrails (dangerous-command blocking, prompt-injection scanning, an
 append-only audit ledger), a 9-agent role fleet, and a structured
 analyze → implement → verify → evidence pipeline.
 
-> **Author / Maintainer:** Dau Sy Manh — `manhds@fpt.com`
+> **Author / Maintainer:** Dau Sy Manh — `manhds@`
 > **License:** Apache-2.0 (see [`LICENSE`](LICENSE) / [`NOTICE`](NOTICE))
 > This repo is the **public distribution** (packaged artifact + installer +
 > guide). It is consumed, not built here.
@@ -177,7 +177,7 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 2b3a98f012ae3a63f6f5389861b05f6831234b8d9ccb9007143da66dcac327e4
+content_hash : 345fdc5b5a77147b8f897c1a7af19fe630c30ec4cde8f0ce67ea43f56581a8e6
 file_count   : 81
 ```
 
@@ -228,14 +228,14 @@ bash uninstall.sh --target /path/to/your-project --force --purge
 
 ```powershell
 # Windows
-powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Set -PM "Dau Sy Manh <manhds@fpt.com>"
+powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Set -PM "Dau Sy Manh <manhds@>"
 powershell -File uninstall.ps1  -TargetDir C:\path\to\your-project -ApprovalCode <the-code>
 powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Clear
 ```
 
 ```bash
 # macOS / Linux
-bash harness-lock.sh --target /path/to/your-project --action set --pm "Dau Sy Manh <manhds@fpt.com>"
+bash harness-lock.sh --target /path/to/your-project --action set --pm "Dau Sy Manh <manhds@>"
 bash uninstall.sh    --target /path/to/your-project --approval-code <the-code>
 bash harness-lock.sh --target /path/to/your-project --action clear
 ```
@@ -259,4 +259,4 @@ enforced by GitHub, not by a script a developer can sidestep.
 
 ---
 
-*Copyright © 2026 Dau Sy Manh <manhds@fpt.com>. Licensed under Apache-2.0.*
+*Copyright © 2026 Dau Sy Manh <manhds@>. Licensed under Apache-2.0.*

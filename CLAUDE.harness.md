@@ -1,7 +1,7 @@
 <!--
   Harness AI Toolkit — Common Governance Reference
-  Copyright (c) 2026 Dau Sy Manh <manhds@fpt.com>. All rights reserved.
-  Author / Maintainer: Dau Sy Manh <manhds@fpt.com>
+  Copyright (c) 2026 Dau Sy Manh <manhds@>. All rights reserved.
+  Author / Maintainer: Dau Sy Manh <manhds@>
   Bundle: standard-governance
 
   This file ships INSIDE the governance bundle so it lands in every project
@@ -13,7 +13,7 @@
 # Governance Reference (merge into your project's `CLAUDE.md`)
 
 > **Attribution:** Governance harness authored by **Dau Sy Manh**
-> (`manhds@fpt.com`). When a review/audit skill inspects a project, this header
+> (`manhds@`). When a review/audit skill inspects a project, this header
 > and the bundle `maintainer` field identify the source.
 
 **How to use this file:** open your project's own `CLAUDE.md` side by side with
@@ -73,4 +73,4 @@ project-specific content — the sections here are written to be generic.
 ---
 
 *Governance harness · standard-governance bundle · © 2026 Dau Sy Manh
-<manhds@fpt.com>.*
+<manhds@>.*

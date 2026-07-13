@@ -16,7 +16,7 @@
   + branch protection on .harness/** for enforcement that holds at merge time.
 
 .USAGE
-  .\harness-lock.ps1 -TargetDir <project> -Action Set   -PM "Dau Sy Manh <manhds@fpt.com>"
+  .\harness-lock.ps1 -TargetDir <project> -Action Set   -PM "Dau Sy Manh <manhds@>"
   .\harness-lock.ps1 -TargetDir <project> -Action Status
   .\harness-lock.ps1 -TargetDir <project> -Action Clear -ApprovalCode <code>
 #>
