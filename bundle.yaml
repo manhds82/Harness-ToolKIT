@@ -36,6 +36,16 @@ provides:
     - ".harness/scripts/bash/*.sh"
   contracts:
     - "contracts/*.yaml"
+  # In-project copy of the installer/uninstaller/PM-lock (both shells) so a
+  # governed project can uninstall itself in place: uninstall reads the install
+  # receipt (.harness/.bundle-manifest.json), no original .bundle.json needed.
+  tooling:
+    - "tools/harness-bundle/install.ps1"
+    - "tools/harness-bundle/install.sh"
+    - "tools/harness-bundle/uninstall.ps1"
+    - "tools/harness-bundle/uninstall.sh"
+    - "tools/harness-bundle/harness-lock.ps1"
+    - "tools/harness-bundle/harness-lock.sh"
   memory:
     - ".harness/memory/constitution.md"
   # Common, project-agnostic governance reference (distinct name from a

@@ -49,6 +49,19 @@ for f in b["files"]:
     with open(dest, "wb") as fh:
         fh.write(base64.b64decode(f["b64"]))
     print("  [WRITE] %s" % f["path"]); written += 1
+
+# Install receipt for the in-project uninstaller (path + original sha256).
+import hashlib, datetime, json as _json
+receipt = {
+    "name": b["name"], "version": b["version"], "content_hash": b["content_hash"],
+    "installed_at": datetime.datetime.now().astimezone().isoformat(),
+    "files": [{"path": f["path"],
+               "sha256": hashlib.sha256(base64.b64decode(f["b64"])).hexdigest()}
+              for f in b["files"]],
+}
+rdir = os.path.join(target, ".harness"); os.makedirs(rdir, exist_ok=True)
+with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as fh:
+    _json.dump(receipt, fh, indent=2)
 print("[install] done: %d written, %d skipped. Integrity OK (%s)." % (written, skipped, b["content_hash"]))
 PY
 

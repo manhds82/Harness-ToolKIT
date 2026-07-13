@@ -18,6 +18,11 @@ param(
 $ErrorActionPreference = "Stop"
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+function Sha256HexOf([byte[]]$Bytes) {
+    $s = [System.Security.Cryptography.SHA256]::Create()
+    return ([BitConverter]::ToString($s.ComputeHash($Bytes)) -replace '-', '').ToLower()
+}
+
 if (-not (Test-Path $BundleFile)) { throw "Bundle file not found: $BundleFile" }
 $bundle = Get-Content -Path $BundleFile -Raw -Encoding utf8 | ConvertFrom-Json
 
@@ -46,5 +51,23 @@ foreach ($f in $bundle.files) {
     Write-Output "  [WRITE] $($f.path)"
     $written++
 }
+
+# --- Install receipt: lets the in-project uninstaller know exactly what this
+# bundle placed (path + original sha256), so uninstall works without the
+# original .bundle.json and can tell pristine files from user-edited ones. ---
+$manifestFiles = foreach ($f in $bundle.files) {
+    $bytes = [Convert]::FromBase64String($f.b64)
+    [ordered]@{ path = $f.path; sha256 = (Sha256HexOf $bytes) }
+}
+$receiptDir = Join-Path $TargetDir ".harness"
+if (-not (Test-Path $receiptDir)) { New-Item -ItemType Directory -Path $receiptDir -Force | Out-Null }
+$receipt = [ordered]@{
+    name         = $bundle.name
+    version      = $bundle.version
+    content_hash = $bundle.content_hash
+    installed_at = (Get-Date -Format 'o')
+    files        = @($manifestFiles)
+} | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText((Join-Path $receiptDir ".bundle-manifest.json"), $receipt, $Utf8NoBom)
 
 Write-Output "[install] done: $written written, $skipped skipped. Integrity OK ($($bundle.content_hash))."

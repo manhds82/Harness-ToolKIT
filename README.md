@@ -17,7 +17,7 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 81 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 87 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
@@ -79,8 +79,13 @@ your-project/
 │   ├── scripts/powershell/    # the hook + guard scripts
 │   └── memory/constitution.md
 ├── contracts/                 # project.yaml, tool-registry.yaml, workflow.yaml, agent.yaml
+├── tools/harness-bundle/      # in-project copy of install/uninstall/harness-lock (.ps1 + .sh)
 └── CLAUDE.harness.md          # governance reference (compare/merge into your CLAUDE.md)
 ```
+
+Install also writes `.harness/.bundle-manifest.json` — a receipt (each installed
+path + its original SHA-256) so the in-project uninstaller knows exactly what to
+remove and which files you've since edited, without needing the original bundle.
 
 The bundle **does not ship a `CLAUDE.md`** — your project's own memory file is
 never touched.
@@ -177,8 +182,8 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 345fdc5b5a77147b8f897c1a7af19fe630c30ec4cde8f0ce67ea43f56581a8e6
-file_count   : 81
+content_hash : 080e20761ce483281b5aa76219d2e06662d341a8139ca2bffb369e9e00c08df9
+file_count   : 87
 ```
 
 ## Honest limitations
@@ -202,18 +207,31 @@ files (back up any you customized first — or let uninstall's backup handle it)
 
 ## Uninstall (gated + audited)
 
-Use `uninstall.ps1` — it removes **exactly** the files the bundle installed
-(reads the manifest), so your own files are never touched. Files you *edited*
-since install are **kept** by default (or backed up to
-`.harness-uninstall-backup/` and removed with `-Force`). Every attempt is logged
-to an audit receipt at the project root.
+Because the bundle ships the tooling **into** the project, you can uninstall
+**from inside the project** — `uninstall` reads the install receipt
+(`.harness/.bundle-manifest.json`), so no `-BundleFile` is needed. It removes
+**exactly** the files the bundle installed, keeps files you *edited* (or backs
+them up to `.harness-uninstall-backup/` and removes them with `-Force`), and
+logs every attempt to an audit receipt at the project root.
 
 ```powershell
-# Windows — interactive confirm / -Force (also backs up edited files) / -Purge (runtime data)
-powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project
-powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force
-powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force -Purge
+# From inside the installed project (Windows). -Force also backs up edited files;
+# -Purge also drops runtime data (ledger + telemetry).
+cd C:\path\to\your-project
+powershell -File tools\harness-bundle\uninstall.ps1 -TargetDir .
+powershell -File tools\harness-bundle\uninstall.ps1 -TargetDir . -Force
+powershell -File tools\harness-bundle\uninstall.ps1 -TargetDir . -Force -Purge
 ```
+
+```bash
+# From inside the installed project (macOS / Linux)
+cd /path/to/your-project
+bash tools/harness-bundle/uninstall.sh --target .
+bash tools/harness-bundle/uninstall.sh --target . --force
+bash tools/harness-bundle/uninstall.sh --target . --force --purge
+```
+
+(You can still run the copies in **this** repo with `--bundle` if you prefer.)
 
 ```bash
 # macOS / Linux — same behavior

@@ -50,15 +50,30 @@ if (-not (Test-Path $TargetDir)) { throw "Target not found: $TargetDir" }
 $TargetDir = (Resolve-Path $TargetDir).Path
 $leaf = Split-Path -Leaf $TargetDir
 
-# --- Resolve the bundle manifest (default: newest *.bundle.json next to script) ---
-if (-not $BundleFile) {
+# --- Resolve what to remove. Priority:
+#   1) explicit -BundleFile (path + b64 -> original sha256)
+#   2) the install receipt .harness/.bundle-manifest.json (path + sha256)
+#   3) newest *.bundle.json next to this script
+# $meta = {name, version}; $fileList = [{path, sha256}]. ---
+$receiptPath = Join-Path $TargetDir ".harness\.bundle-manifest.json"
+$meta = $null; $fileList = @()
+if ($BundleFile) {
+    if (-not (Test-Path $BundleFile)) { throw "Bundle file not found: $BundleFile" }
+    $bundle = Get-Content -Path $BundleFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $meta = @{ name = $bundle.name; version = $bundle.version }
+    $fileList = foreach ($f in $bundle.files) { @{ path = $f.path; sha256 = (Sha256Hex ([Convert]::FromBase64String($f.b64))) } }
+} elseif (Test-Path $receiptPath) {
+    $r = Get-Content -Path $receiptPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $meta = @{ name = $r.name; version = $r.version }
+    $fileList = foreach ($f in $r.files) { @{ path = $f.path; sha256 = $f.sha256 } }
+} else {
     $cand = Get-ChildItem -Path $PSScriptRoot -Filter "*.bundle.json" -File -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending | Select-Object -First 1
-    if (-not $cand) { throw "No -BundleFile given and no *.bundle.json next to this script." }
-    $BundleFile = $cand.FullName
+    if (-not $cand) { throw "No -BundleFile, no install receipt (.harness/.bundle-manifest.json), and no *.bundle.json next to this script." }
+    $bundle = Get-Content -Path $cand.FullName -Raw -Encoding utf8 | ConvertFrom-Json
+    $meta = @{ name = $bundle.name; version = $bundle.version }
+    $fileList = foreach ($f in $bundle.files) { @{ path = $f.path; sha256 = (Sha256Hex ([Convert]::FromBase64String($f.b64))) } }
 }
-if (-not (Test-Path $BundleFile)) { throw "Bundle file not found: $BundleFile" }
-$bundle = Get-Content -Path $BundleFile -Raw -Encoding utf8 | ConvertFrom-Json
 
 # --- Audit helper (writes to both the telemetry log and a purge-proof receipt) ---
 $stamp = Get-Date -Format 'o'
@@ -67,8 +82,8 @@ $secLog = Join-Path $TargetDir ".harness\telemetry\security-events.jsonl"
 function Audit([string]$Event, [string]$Detail) {
     $rec = [ordered]@{
         event_id = [guid]::NewGuid().ToString(); timestamp = $stamp
-        type = "bundle_uninstall"; event = $Event; bundle = $bundle.name
-        version = $bundle.version; target = $TargetDir; actor = $env:USERNAME
+        type = "bundle_uninstall"; event = $Event; bundle = $meta.name
+        version = $meta.version; target = $TargetDir; actor = $env:USERNAME
         detail = $Detail
     } | ConvertTo-Json -Compress
     try { if (Test-Path (Split-Path $secLog)) { Write-NoBom $secLog ($rec + "`n") } } catch {}
@@ -102,18 +117,18 @@ if (Test-Path $policyPath) {
 }
 
 Audit "started" "purge=$Purge force=$Force"
-Write-Output "[uninstall] $($bundle.name) v$($bundle.version) from $TargetDir"
+Write-Output "[uninstall] $($meta.name) v$($meta.version) from $TargetDir"
 
 # --- Remove exactly the files the bundle installed ---
 $removed = 0; $keptModified = 0; $absent = 0
 $backupDir = Join-Path $TargetDir ".harness-uninstall-backup"
-foreach ($f in $bundle.files) {
+foreach ($f in $fileList) {
     $rel = $f.path.Replace("/", [char]92)
     $dest = Join-Path $TargetDir $rel
     if (-not (Test-Path $dest)) { $absent++; continue }
 
     $curHash = Sha256Hex ([System.IO.File]::ReadAllBytes($dest))
-    $origHash = Sha256Hex ([Convert]::FromBase64String($f.b64))
+    $origHash = $f.sha256
     if ($curHash -eq $origHash) {
         Remove-Item $dest -Force; $removed++
     } elseif ($Force) {
@@ -137,8 +152,9 @@ if ($Purge) {
     }
 }
 
-# --- Remove policy last (only reached if approved) + prune empty dirs ---
+# --- Remove policy + install receipt last (only reached if approved) + prune empty dirs ---
 if (Test-Path $policyPath) { Remove-Item $policyPath -Force }
+if (Test-Path $receiptPath) { Remove-Item $receiptPath -Force }
 foreach ($d in @("contracts", ".claude", ".harness")) {
     $p = Join-Path $TargetDir $d
     if ((Test-Path $p) -and -not (Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue)) {

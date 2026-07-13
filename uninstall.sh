@@ -21,10 +21,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$TARGET" && -d "$TARGET" ]] || { echo "--target <existing project dir> required" >&2; exit 2; }
-if [[ -z "$BUNDLE" ]]; then
-  BUNDLE="$(ls -1t "$(dirname "$0")"/*.bundle.json 2>/dev/null | head -1 || true)"
+
+# Resolve what to remove: --bundle (b64) > install receipt (sha256) > sibling.
+RECEIPT="$TARGET/.harness/.bundle-manifest.json"
+if [[ -n "$BUNDLE" ]]; then
+  SRC_MODE="bundle"; SRC="$BUNDLE"
+elif [[ -f "$RECEIPT" ]]; then
+  SRC_MODE="receipt"; SRC="$RECEIPT"
+else
+  SRC="$(ls -1t "$(dirname "$0")"/*.bundle.json 2>/dev/null | head -1 || true)"; SRC_MODE="bundle"
 fi
-[[ -n "$BUNDLE" && -f "$BUNDLE" ]] || { echo "bundle manifest not found (use --bundle)" >&2; exit 2; }
+[[ -n "${SRC:-}" && -f "$SRC" ]] || { echo "no --bundle, no install receipt (.harness/.bundle-manifest.json), no sibling *.bundle.json" >&2; exit 2; }
 PY="$(command -v python3 || command -v python || true)"
 [[ -n "$PY" ]] || { echo "python3 required" >&2; exit 3; }
 
@@ -63,17 +70,17 @@ elif [[ "$FORCE" -ne 1 ]]; then
 fi
 
 # --- Remove exactly the installed files (keep/back up user-modified) ---
-"$PY" - "$BUNDLE" "$TARGET" "$FORCE" "$PURGE" <<'PY'
+"$PY" - "$SRC" "$SRC_MODE" "$TARGET" "$FORCE" "$PURGE" <<'PY'
 import json, base64, hashlib, os, shutil, sys, datetime
-bundle_path, target, force, purge = sys.argv[1], sys.argv[2], sys.argv[3]=="1", sys.argv[4]=="1"
-b = json.load(open(bundle_path, encoding="utf-8"))
+src, mode, target, force, purge = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]=="1", sys.argv[5]=="1"
+d = json.load(open(src, encoding="utf-8"))
 removed = kept = absent = 0
 backup = os.path.join(target, ".harness-uninstall-backup")
-for f in b["files"]:
+for f in d["files"]:
     dest = os.path.join(target, *f["path"].split("/"))
     if not os.path.exists(dest): absent += 1; continue
     cur = hashlib.sha256(open(dest, "rb").read()).hexdigest()
-    orig = hashlib.sha256(base64.b64decode(f["b64"])).hexdigest()
+    orig = f["sha256"] if mode == "receipt" else hashlib.sha256(base64.b64decode(f["b64"])).hexdigest()
     if cur == orig:
         os.remove(dest); removed += 1
     elif force:
@@ -86,16 +93,17 @@ if purge:
     for rt in (".harness/ledger", ".harness/telemetry"):
         p = os.path.join(target, *rt.split("/"))
         if os.path.isdir(p): shutil.rmtree(p); print("  [PURGE] %s" % rt)
-pol = os.path.join(target, ".harness", "uninstall-policy.json")
-if os.path.exists(pol): os.remove(pol)
-for d in ("contracts", ".claude", ".harness"):
-    p = os.path.join(target, d)
+for gone in ("uninstall-policy.json", ".bundle-manifest.json"):
+    p = os.path.join(target, ".harness", gone)
+    if os.path.exists(p): os.remove(p)
+for d2 in ("contracts", ".claude", ".harness"):
+    p = os.path.join(target, d2)
     if os.path.isdir(p) and not any(fn for _,_,fs in os.walk(p) for fn in fs):
         shutil.rmtree(p)
 rec = os.path.join(target, "harness-uninstall-%s.log" % datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 open(rec, "a", encoding="utf-8").write(
     '{"type":"bundle_uninstall","event":"completed","bundle":"%s","removed":%d,"kept":%d,"purge":%s}\n'
-    % (b["name"], removed, kept, str(purge).lower()))
+    % (d["name"], removed, kept, str(purge).lower()))
 print("[uninstall] done: %d removed, %d kept (modified), %d already absent." % (removed, kept, absent))
 if kept: print("[uninstall] %d modified file(s) left; --force to remove (backed up to .harness-uninstall-backup)." % kept)
 print("[uninstall] audit receipt: %s" % rec)
