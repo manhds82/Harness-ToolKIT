@@ -1,0 +1,9 @@
+# This is a DISTRIBUTION repo: the packed *.bundle.json artifact IS the product,
+# so it is committed (not ignored).
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

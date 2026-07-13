@@ -1,0 +1,37 @@
+# Harness Bundle manifest (L5 -- distribution layer).
+# A bundle packages a versioned, governed harness setup (agents + skills +
+# hooks + control policies + contracts + schemas) so a whole team/project gets
+# a consistent, reviewed configuration in one install -- the "npm package for
+# agent capabilities" from the 5-layer toolkit model, but with governance.
+#
+# `provides` lists glob patterns (relative to the source harness root) that
+# pack.ps1 collects into a portable .bundle.json artifact; install.ps1
+# materializes them back into a target project.
+schema_version: "1.0.0"
+name: "standard-governance"
+version: "1.0.0"
+description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks, H4 control policies, contract templates, JSON schemas."
+maintainer: "Dau Sy Manh <manhds@fpt.com>"
+
+provides:
+  agents:
+    - ".claude/agents/*.md"
+  skills:
+    - ".claude/skills/**"
+  hooks:
+    - ".claude/settings.json"
+  control:
+    - ".harness/control/*.json"
+    - ".harness/control/*.yaml"
+  schemas:
+    - ".harness/schemas/*.json"
+  scripts:
+    - ".harness/scripts/powershell/*.ps1"
+  contracts:
+    - "contracts/*.yaml"
+  memory:
+    - ".harness/memory/constitution.md"
+  # Common, project-agnostic governance reference (distinct name from a
+  # project's own CLAUDE.md so install never overwrites it). Compare/copy from.
+  governance-guide:
+    - "CLAUDE.harness.md"
