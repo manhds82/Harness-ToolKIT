@@ -27,6 +27,8 @@ provides:
     - ".harness/schemas/*.json"
   scripts:
     - ".harness/scripts/powershell/*.ps1"
+  scripts-posix:
+    - ".harness/scripts/bash/*.sh"
   contracts:
     - "contracts/*.yaml"
   memory:

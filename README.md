@@ -17,10 +17,10 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 69 files (agents, skills, hooks, control policies, contract templates, JSON schemas, scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
-| `install.ps1` | The installer. Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
-| `uninstall.ps1` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`); honors a PM lock. |
-| `harness-lock.ps1` | PM tool to lock/unlock uninstall behind an approval code. |
+| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 80 files (agents, skills, hooks, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
+| `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
+| `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
 | `CODEOWNERS.example` | Ready-to-use CODEOWNERS so a team can require PM approval to change/remove the harness at merge time (real enforcement). |
 | `bundle.yaml` | The manifest (name/version/maintainer + the `provides` globs the bundle was packed from) — for transparency. |
 | `CLAUDE.harness.md` | A generic, project-agnostic governance reference (Guiding Principles, Conventions C1–C10, Model Reference) to merge into your project's own `CLAUDE.md`. Also shipped inside the bundle. |
@@ -28,29 +28,39 @@ analyze → implement → verify → evidence pipeline.
 ## Requirements
 
 - **Claude Code** (the CLI/agent that reads `.claude/` and runs hooks).
-- **PowerShell 5.1+** (Windows built-in) or **PowerShell 7+** (`pwsh`, cross-platform).
-  The installer and the governance hooks are PowerShell scripts.
-  - On macOS/Linux, install `pwsh` so the hooks run; the native Claude Code
-    permission gate works regardless.
+- **Tooling** (install/uninstall/lock):
+  - **Windows:** the `.ps1` scripts (PowerShell 5.1 built-in — no install needed).
+  - **macOS/Linux:** the `.sh` scripts (bash + **python3**, both standard on
+    macOS/Linux; no `jq` needed).
+- **Governance hooks** ship in **both** flavors inside the bundle
+  (`.harness/scripts/powershell/*.ps1` and `.harness/scripts/bash/*.sh`).
+  Which one fires is decided by `.claude/settings.json` — see
+  [Cross-platform hooks](#cross-platform-hooks) for how to wire it per OS.
 
 ## Install into your project
 
 ```powershell
-# 1. Get this repo (clone or download the .bundle.json + install.ps1)
+# Windows (PowerShell)
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
-
-# 2. Install into YOUR project's repo root
 powershell -File install.ps1 `
     -BundleFile standard-governance-1.0.0.bundle.json `
     -TargetDir C:\path\to\your-project
 ```
 
-The installer prints `[WRITE]` for each new file and `[SKIP]` for files that
-already exist. **It never overwrites an existing file** unless you pass
-`-Force`, so your project's own `CLAUDE.md`, `.claude/settings.json`, etc. are
-safe. It refuses to write anything if the content hash doesn't match (tamper /
-corruption check).
+```bash
+# macOS / Linux (bash + python3)
+git clone https://github.com/manhds82/Harness-ToolKIT.git
+cd Harness-ToolKIT
+bash install.sh \
+    --bundle standard-governance-1.0.0.bundle.json \
+    --target /path/to/your-project
+```
+
+Both installers behave identically: print `[WRITE]`/`[SKIP]` per file, **never
+overwrite an existing file** unless you pass `-Force` / `--force` (so your own
+`CLAUDE.md`, `.claude/settings.json`, etc. stay safe), and **refuse to write
+anything if the content hash doesn't match** (tamper / corruption check).
 
 After install, **restart Claude Code** in your project so the new
 `.claude/settings.json` (permissions + hooks) takes effect.
@@ -99,6 +109,46 @@ devops, researcher, reviewer, tester, writer) and 10 skills — the core pipelin
 `/evidence-bundle`, plus `/fix-and-verify`, `/deep-research`, `/fan`,
 `/deploy-to-test`, `/commit-deploy-log`, `/be-fe-security-audit`.
 
+## Cross-platform hooks
+
+The bundle ships the hook logic **twice** — `.harness/scripts/powershell/*.ps1`
+and `.harness/scripts/bash/*.sh` (identical behavior). Which set fires is set by
+`.claude/settings.json`. Current Claude Code executes a hook `command` through a
+shell (`sh -c` on macOS/Linux, Git Bash / PowerShell on Windows), so a **bare
+`.ps1` path does not run on macOS/Linux** — the hook must name an interpreter.
+Wire the hooks to the flavor that matches the OS:
+
+```jsonc
+// Windows — .claude/settings.json (PowerShell)
+"hooks": {
+  "PreToolUse": [{ "matcher": "",
+    "hooks": [{ "type": "command",
+      "command": "powershell", "args": ["-NoProfile","-File",
+        "${CLAUDE_PROJECT_DIR}/.harness/scripts/powershell/harness-runtime-guard.ps1"] }] }]
+}
+```
+
+```jsonc
+// macOS / Linux — .claude/settings.json (bash)
+"hooks": {
+  "PreToolUse": [{ "matcher": "",
+    "hooks": [{ "type": "command",
+      "command": "bash", "args": [
+        "${CLAUDE_PROJECT_DIR}/.harness/scripts/bash/harness-runtime-guard.sh"] }] }]
+}
+```
+
+(Same pattern for `UserPromptSubmit` → `injection-scan`, `PostToolUse` →
+`harness-post-tool-use`, `SessionStart`/`SessionEnd`, `SubagentStop` →
+`agentops-sampler`.) A hook **blocks** a tool by exiting `2` (stderr → Claude)
+or by printing `{"hookSpecificOutput":{"permissionDecision":"deny", ...}}` and
+exiting `0`; the bundled guard scripts already do this.
+
+> **Version note (verify on your Claude Code):** the exact `hooks` schema is
+> version-specific. Confirm the shape against `claude` docs / `--help` for your
+> version; older builds accepted a bare path string. The `permissions`
+> allow/ask/deny list works identically on all OSes regardless of hooks.
+
 ## Configure for your project
 
 1. **`contracts/project.yaml`** — the project SSOT:
@@ -122,8 +172,8 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 1c5a4d31ba5d644ecc6b9e50521c4940eb57b390c674a84de0e35f750bd49e19
-file_count   : 69
+content_hash : 3cd1c47e4bd7e016b59d5d1394a35eaa2111c3e2c0f137a6d37cee317a24e186
+file_count   : 80
 ```
 
 ## Honest limitations
@@ -131,8 +181,10 @@ file_count   : 69
 - **Local defense-in-depth, not a hard boundary.** Hooks + config live in the
   repo; a user with write access can relax `risk-policy.yaml` / `settings.json`.
   Un-bypassable enforcement needs a server-side gateway (not part of this bundle).
-- **Hooks are PowerShell.** On non-Windows, install `pwsh` or the hooks no-op
-  (the native permission gate still works).
+- **Hooks ship for both shells** (`.ps1` + `.sh`), but `.claude/settings.json`
+  must point to the flavor for your OS (see [Cross-platform hooks](#cross-platform-hooks));
+  a bare `.ps1` path does not run on macOS/Linux. The native permission gate
+  works on every OS regardless.
 - **No central server included.** Token budgets here are local telemetry only;
   multi-member budgets/dashboards require the separate Control Portal.
 - **`secret-scan` is shipped but not wired to a hook by default** — wire it in
@@ -152,14 +204,17 @@ since install are **kept** by default (or backed up to
 to an audit receipt at the project root.
 
 ```powershell
-# Interactive: asks you to type the project folder name to confirm
+# Windows — interactive confirm / -Force (also backs up edited files) / -Purge (runtime data)
 powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project
-
-# Non-interactive / CI: -Force skips the prompt and also backs-up+removes edited files
 powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force
-
-# Also drop runtime data (ledger + telemetry), which are not part of the bundle
 powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force -Purge
+```
+
+```bash
+# macOS / Linux — same behavior
+bash uninstall.sh --target /path/to/your-project
+bash uninstall.sh --target /path/to/your-project --force
+bash uninstall.sh --target /path/to/your-project --force --purge
 ```
 
 ### Requiring PM approval to uninstall
@@ -167,14 +222,17 @@ powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force -Purge
 **Local gate** — a PM locks the project so uninstall refuses without a code:
 
 ```powershell
-# PM sets a lock (prompts for a hidden approval code; stored salted-hashed)
+# Windows
 powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Set -PM "Dau Sy Manh <manhds@fpt.com>"
-
-# Now uninstall needs the code, or it refuses and logs a denied attempt
-powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -ApprovalCode <the-code>
-
-# PM removes the lock later
+powershell -File uninstall.ps1  -TargetDir C:\path\to\your-project -ApprovalCode <the-code>
 powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Clear
+```
+
+```bash
+# macOS / Linux
+bash harness-lock.sh --target /path/to/your-project --action set --pm "Dau Sy Manh <manhds@fpt.com>"
+bash uninstall.sh    --target /path/to/your-project --approval-code <the-code>
+bash harness-lock.sh --target /path/to/your-project --action clear
 ```
 
 > **Be honest about what this is (C10).** The lock gates the *uninstall script*
