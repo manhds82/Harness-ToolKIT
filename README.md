@@ -19,6 +19,9 @@ analyze → implement → verify → evidence pipeline.
 |------|---------|
 | `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 69 files (agents, skills, hooks, control policies, contract templates, JSON schemas, scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` | The installer. Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
+| `uninstall.ps1` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`); honors a PM lock. |
+| `harness-lock.ps1` | PM tool to lock/unlock uninstall behind an approval code. |
+| `CODEOWNERS.example` | Ready-to-use CODEOWNERS so a team can require PM approval to change/remove the harness at merge time (real enforcement). |
 | `bundle.yaml` | The manifest (name/version/maintainer + the `provides` globs the bundle was packed from) — for transparency. |
 | `CLAUDE.harness.md` | A generic, project-agnostic governance reference (Guiding Principles, Conventions C1–C10, Model Reference) to merge into your project's own `CLAUDE.md`. Also shipped inside the bundle. |
 
@@ -135,12 +138,61 @@ file_count   : 69
 - **`secret-scan` is shipped but not wired to a hook by default** — wire it in
   `.claude/settings.json` if you want automatic secret scanning.
 
-## Update / uninstall
+## Update
 
-- **Update:** re-run `install.ps1` with a newer bundle and `-Force` to overwrite
-  the managed files (back up any you customized first).
-- **Uninstall:** remove `.claude/`, `.harness/`, `contracts/`, `CLAUDE.harness.md`
-  (or just the parts you added) and restart Claude Code.
+Re-run `install.ps1` with a newer bundle and `-Force` to overwrite the managed
+files (back up any you customized first — or let uninstall's backup handle it).
+
+## Uninstall (gated + audited)
+
+Use `uninstall.ps1` — it removes **exactly** the files the bundle installed
+(reads the manifest), so your own files are never touched. Files you *edited*
+since install are **kept** by default (or backed up to
+`.harness-uninstall-backup/` and removed with `-Force`). Every attempt is logged
+to an audit receipt at the project root.
+
+```powershell
+# Interactive: asks you to type the project folder name to confirm
+powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project
+
+# Non-interactive / CI: -Force skips the prompt and also backs-up+removes edited files
+powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force
+
+# Also drop runtime data (ledger + telemetry), which are not part of the bundle
+powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -Force -Purge
+```
+
+### Requiring PM approval to uninstall
+
+**Local gate** — a PM locks the project so uninstall refuses without a code:
+
+```powershell
+# PM sets a lock (prompts for a hidden approval code; stored salted-hashed)
+powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Set -PM "Dau Sy Manh <manhds@fpt.com>"
+
+# Now uninstall needs the code, or it refuses and logs a denied attempt
+powershell -File uninstall.ps1 -TargetDir C:\path\to\your-project -ApprovalCode <the-code>
+
+# PM removes the lock later
+powershell -File harness-lock.ps1 -TargetDir C:\path\to\your-project -Action Clear
+```
+
+> **Be honest about what this is (C10).** The lock gates the *uninstall script*
+> and creates an audit trail — it is a **deterrent**, not an OS-level lock.
+> Anyone with write access to the folder can still delete files by hand. The
+> lock file itself (`.harness/uninstall-policy.json`) can be deleted.
+
+**Real enforcement for a team** — protect the governance paths at the
+repository level, which **cannot be bypassed locally**:
+
+1. Copy [`CODEOWNERS.example`](CODEOWNERS.example) to your project's
+   `.github/CODEOWNERS`, set the PM as owner of `.harness/**`, `.claude/**`,
+   `contracts/**`, `CLAUDE.harness.md`.
+2. Enable branch protection on the default branch with **“Require review from
+   Code Owners.”**
+
+Now any PR that removes or edits the harness needs the PM's approval to merge —
+enforced by GitHub, not by a script a developer can sidestep.
 
 ---
 
