@@ -17,10 +17,11 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 87 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 89 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
+| `harness-verify.ps1` / `harness-verify.sh` | Doctor: checks a project has the bundle applied correctly (files present + hash-match, hooks wired, lock status). |
 | `CODEOWNERS.example` | Ready-to-use CODEOWNERS so a team can require PM approval to change/remove the harness at merge time (real enforcement). |
 | `bundle.yaml` | The manifest (name/version/maintainer + the `provides` globs the bundle was packed from) — for transparency. |
 | `CLAUDE.harness.md` | A generic, project-agnostic governance reference (Guiding Principles, Conventions C1–C10, Model Reference) to merge into your project's own `CLAUDE.md`. Also shipped inside the bundle. |
@@ -64,6 +65,26 @@ anything if the content hash doesn't match** (tamper / corruption check).
 
 After install, **restart Claude Code** in your project so the new
 `.claude/settings.json` (permissions + hooks) takes effect.
+
+## Verify it's applied (the doctor)
+
+Confirm a project has the bundle applied correctly at any time — it reads the
+install receipt and checks every file is present + hash-matches, that the hooks
+use the current schema and their guard script exists, and the PM-lock status.
+
+```powershell
+# Windows (the bundle also installs this into <project>/tools/harness-bundle/)
+powershell -File harness-verify.ps1 -TargetDir C:\path\to\your-project
+```
+```bash
+bash harness-verify.sh --target /path/to/your-project
+```
+Look for `== RESULT: APPLIED OK` (exit 0). `NOT FULLY APPLIED` (exit 1) lists what
+to fix — e.g. missing files (re-run install) or an old-format `settings.json`
+(re-install it so the hooks actually fire).
+
+For the **full command & feature reference** (gateway, portal, tests, skills,
+maintenance), see [`docs/COMMANDS.md`](https://github.com/manhds82/HarnessAIToolKIT/blob/main/docs/COMMANDS.md) in the source repo.
 
 ## What gets installed
 
@@ -182,8 +203,8 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 080e20761ce483281b5aa76219d2e06662d341a8139ca2bffb369e9e00c08df9
-file_count   : 87
+content_hash : 2768fb17b6bdeb748764fbb7293121e6703b11765a501335ddcb8639a66faea6
+file_count   : 89
 ```
 
 ## Honest limitations

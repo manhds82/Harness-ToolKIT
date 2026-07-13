@@ -46,6 +46,8 @@ provides:
     - "tools/harness-bundle/uninstall.sh"
     - "tools/harness-bundle/harness-lock.ps1"
     - "tools/harness-bundle/harness-lock.sh"
+    - "tools/harness-bundle/harness-verify.ps1"
+    - "tools/harness-bundle/harness-verify.sh"
   memory:
     - ".harness/memory/constitution.md"
   # Common, project-agnostic governance reference (distinct name from a
