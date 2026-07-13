@@ -27,6 +27,9 @@ fi
 PY="$(command -v python3 || command -v python || true)"
 [[ -n "$PY" ]] || { echo "python3 required" >&2; exit 3; }
 
+# Did the project already have its own settings.json? (so we don't clobber it)
+PRE_SETTINGS=0; [[ -f "$TARGET/.claude/settings.json" ]] && PRE_SETTINGS=1
+
 "$PY" - "$BUNDLE" "$TARGET" "$FORCE" <<'PY'
 import json, base64, hashlib, os, sys
 bundle_path, target, force = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
@@ -48,3 +51,15 @@ for f in b["files"]:
     print("  [WRITE] %s" % f["path"]); written += 1
 print("[install] done: %d written, %d skipped. Integrity OK (%s)." % (written, skipped, b["content_hash"]))
 PY
+
+# --- OS hook selection (macOS/Linux): use the bash hooks, not the .ps1 ones ---
+# The bundle ships settings.json (Windows/powershell) + settings.posix.json
+# (bash). On POSIX, activate the bash variant -- but never overwrite a
+# settings.json the project already had (unless --force).
+POSIX="$TARGET/.claude/settings.posix.json"
+SET="$TARGET/.claude/settings.json"
+if [[ -f "$POSIX" && ( "$PRE_SETTINGS" -eq 0 || "$FORCE" -eq 1 ) ]]; then
+  cp -f "$POSIX" "$SET"
+  echo "[install] selected POSIX (bash) hooks for .claude/settings.json"
+fi
+

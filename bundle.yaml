@@ -19,7 +19,12 @@ provides:
   skills:
     - ".claude/skills/**"
   hooks:
+    # settings.json = Windows (powershell) hooks; settings.posix.json = bash
+    # hooks. install.sh selects the posix one on macOS/Linux; install.ps1 keeps
+    # the Windows one. Both use the current Claude Code hook schema
+    # (array of {matcher, hooks:[{type:command, command, args}]}).
     - ".claude/settings.json"
+    - ".claude/settings.posix.json"
   control:
     - ".harness/control/*.json"
     - ".harness/control/*.yaml"

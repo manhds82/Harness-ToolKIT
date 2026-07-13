@@ -17,7 +17,7 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 80 files (agents, skills, hooks, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.0.0.bundle.json` | The packaged governance bundle — 81 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
@@ -112,11 +112,16 @@ devops, researcher, reviewer, tester, writer) and 10 skills — the core pipelin
 ## Cross-platform hooks
 
 The bundle ships the hook logic **twice** — `.harness/scripts/powershell/*.ps1`
-and `.harness/scripts/bash/*.sh` (identical behavior). Which set fires is set by
-`.claude/settings.json`. Current Claude Code executes a hook `command` through a
-shell (`sh -c` on macOS/Linux, Git Bash / PowerShell on Windows), so a **bare
-`.ps1` path does not run on macOS/Linux** — the hook must name an interpreter.
-Wire the hooks to the flavor that matches the OS:
+and `.harness/scripts/bash/*.sh` (identical behavior) — plus two ready
+`.claude/settings.json` variants. **The installer picks the right one for you:**
+`install.ps1` keeps the PowerShell form; `install.sh` activates the bash form
+(and never overwrites a `settings.json` you already had). So on a normal install
+you don't wire anything by hand.
+
+Why it matters: Claude Code runs a hook `command` through a shell (`sh -c` on
+macOS/Linux, Git Bash / PowerShell on Windows), so a **bare `.ps1` path does not
+run on macOS/Linux** — the hook must name an interpreter. The two forms the
+installer selects between (shown for reference / manual verification):
 
 ```jsonc
 // Windows — .claude/settings.json (PowerShell)
@@ -172,8 +177,8 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 3cd1c47e4bd7e016b59d5d1394a35eaa2111c3e2c0f137a6d37cee317a24e186
-file_count   : 80
+content_hash : 2b3a98f012ae3a63f6f5389861b05f6831234b8d9ccb9007143da66dcac327e4
+file_count   : 81
 ```
 
 ## Honest limitations
