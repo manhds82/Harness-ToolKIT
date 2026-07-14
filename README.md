@@ -25,6 +25,7 @@ analyze → implement → verify → evidence pipeline.
 | `CODEOWNERS.example` | Ready-to-use CODEOWNERS so a team can require PM approval to change/remove the harness at merge time (real enforcement). |
 | `bundle.yaml` | The manifest (name/version/maintainer + the `provides` globs the bundle was packed from) — for transparency. |
 | `CLAUDE.harness.md` | A generic, project-agnostic governance reference (Guiding Principles, Conventions C1–C10, Model Reference) to merge into your project's own `CLAUDE.md`. Also shipped inside the bundle. |
+| `docs/` | Optional central-management guides: [`portal-usage-guide.html`](docs/portal-usage-guide.html) (Portal setup, token metering, onboard an existing project) and [`server-deploy-runbook.html`](docs/server-deploy-runbook.html) (self-host the Portal on a shared server). |
 
 ## Requirements
 
