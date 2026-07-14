@@ -5,15 +5,20 @@
 # unless --force. Requires python3 (for JSON/base64/hash; avoids jq/coreutils
 # flag differences between macOS and Linux).
 #
-#   ./install.sh --bundle standard-governance-1.0.0.bundle.json --target /path/to/project [--force]
+#   ./install.sh --bundle standard-governance-1.0.0.bundle.json --target /path/to/project [--force] [--merge-claude]
+#
+#   --merge-claude  After installing, auto-merge CLAUDE.harness.md into CLAUDE.md.
+#                   Creates CLAUDE.md if absent; appends with <!-- harness:merged -->
+#                   sentinel if present but not yet merged; skips if sentinel found.
 set -euo pipefail
 
-BUNDLE=""; TARGET=""; FORCE=0
+BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --bundle) BUNDLE="$2"; shift 2;;
-    --target) TARGET="$2"; shift 2;;
-    --force)  FORCE=1; shift;;
+    --bundle)       BUNDLE="$2"; shift 2;;
+    --target)       TARGET="$2"; shift 2;;
+    --force)        FORCE=1; shift;;
+    --merge-claude) MERGE_CLAUDE=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -64,6 +69,24 @@ with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as
     _json.dump(receipt, fh, indent=2)
 print("[install] done: %d written, %d skipped. Integrity OK (%s)." % (written, skipped, b["content_hash"]))
 PY
+
+# --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (--merge-claude) ---
+if [[ "$MERGE_CLAUDE" -eq 1 ]]; then
+  HARNESS_MD="$TARGET/CLAUDE.harness.md"
+  CLAUDE_MD="$TARGET/CLAUDE.md"
+  if [[ ! -f "$HARNESS_MD" ]]; then
+    echo "[merge] WARNING: CLAUDE.harness.md not found in target -- skipping" >&2
+  elif grep -q '<!--.*harness:merged.*-->' "$CLAUDE_MD" 2>/dev/null; then
+    echo "[SKIP]  CLAUDE.md already contains harness governance (sentinel found -- skipping)"
+  elif [[ ! -f "$CLAUDE_MD" ]]; then
+    cp "$HARNESS_MD" "$CLAUDE_MD"
+    echo "[MERGE] created CLAUDE.md from CLAUDE.harness.md"
+  else
+    printf '\n\n---\n<!-- harness:merged -->\n\n' >> "$CLAUDE_MD"
+    cat "$HARNESS_MD" >> "$CLAUDE_MD"
+    echo "[MERGE] appended harness governance to existing CLAUDE.md"
+  fi
+fi
 
 # --- OS hook selection (macOS/Linux): use the bash hooks, not the .ps1 ones ---
 # The bundle ships settings.json (Windows/powershell) + settings.posix.json

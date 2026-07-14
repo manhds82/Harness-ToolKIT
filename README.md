@@ -64,6 +64,34 @@ overwrite an existing file** unless you pass `-Force` / `--force` (so your own
 `CLAUDE.md`, `.claude/settings.json`, etc. stay safe), and **refuse to write
 anything if the content hash doesn't match** (tamper / corruption check).
 
+### Auto-merge governance into CLAUDE.md
+
+Pass `-MergeClaude` (PowerShell) or `--merge-claude` (bash) to automatically
+merge the harness governance reference into your project's `CLAUDE.md` in one
+step — no manual copy-paste needed:
+
+```powershell
+# Windows: install + auto-merge CLAUDE.md
+powershell -File install.ps1 `
+    -BundleFile standard-governance-1.0.0.bundle.json `
+    -TargetDir C:\path\to\your-project `
+    -MergeClaude
+```
+
+```bash
+# macOS / Linux: install + auto-merge CLAUDE.md
+bash install.sh \
+    --bundle standard-governance-1.0.0.bundle.json \
+    --target /path/to/your-project \
+    --merge-claude
+```
+
+Behaviour:
+- **No `CLAUDE.md` yet** → creates it from `CLAUDE.harness.md`.
+- **`CLAUDE.md` exists, no harness section** → appends the harness governance
+  block with a `<!-- harness:merged -->` sentinel.
+- **Sentinel already present** → skips silently (safe to re-run with `-Force`).
+
 After install, **restart Claude Code** in your project so the new
 `.claude/settings.json` (permissions + hooks) takes effect.
 
@@ -189,9 +217,10 @@ exiting `0`; the bundled guard scripts already do this.
      `identity.roles`, not a top-level key).
    - top-level `budget:` — `max_tokens_per_session`, `max_cost_per_session_usd`,
      `alert_at_percent`.
-2. **`CLAUDE.harness.md` → your `CLAUDE.md`** — open both side by side and copy
-   the **Guiding Principles**, **Conventions C1–C10**, and **Model Reference**
-   sections into your own `CLAUDE.md` (create one if you have none). Keep
+2. **`CLAUDE.harness.md` → your `CLAUDE.md`** — pass `-MergeClaude` /
+   `--merge-claude` during install to do this automatically (recommended), or
+   open both files side by side and copy the **Guiding Principles**,
+   **Conventions C1–C10**, and **Model Reference** sections manually. Keep
    `CLAUDE.harness.md` as a read-only reference or delete it once merged.
 3. **`.harness/control/risk-policy.yaml`** — add/adjust the command deny
    patterns for your project. Guard scripts **read** this YAML, so you change
@@ -204,7 +233,7 @@ it to the manifest's `content_hash` before writing. A tampered or truncated
 bundle is rejected with `Bundle integrity check FAILED`. The published artifact:
 
 ```
-content_hash : 2768fb17b6bdeb748764fbb7293121e6703b11765a501335ddcb8639a66faea6
+content_hash : 715f91632bab06d5d3f42b09e240f4e695558a4e3a6b3d5999d69ffe8b295338
 file_count   : 89
 ```
 

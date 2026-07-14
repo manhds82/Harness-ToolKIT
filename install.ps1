@@ -7,12 +7,21 @@
   governed evolution of harness-init: instead of hardcoded templates, it
   installs a named, versioned, hash-verified bundle.
 .USAGE
-  .\install.ps1 -BundleFile <x.bundle.json> -TargetDir <project dir> [-Force]
+  .\install.ps1 -BundleFile <x.bundle.json> -TargetDir <project dir> [-Force] [-MergeClaude]
+
+  -MergeClaude  After installing, automatically merge CLAUDE.harness.md into
+                CLAUDE.md of the target project.
+                  * If CLAUDE.md does not exist: creates it from CLAUDE.harness.md.
+                  * If CLAUDE.md exists but has no harness section: appends the
+                    harness content with a <!-- harness:merged --> sentinel (safe
+                    to re-run -- the sentinel prevents double-merging).
+                  * If sentinel is already present: skips silently.
 #>
 param(
     [Parameter(Mandatory)][string]$BundleFile,
     [Parameter(Mandatory)][string]$TargetDir,
-    [switch]$Force = $false
+    [switch]$Force = $false,
+    [switch]$MergeClaude = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,3 +80,27 @@ $receipt = [ordered]@{
 [System.IO.File]::WriteAllText((Join-Path $receiptDir ".bundle-manifest.json"), $receipt, $Utf8NoBom)
 
 Write-Output "[install] done: $written written, $skipped skipped. Integrity OK ($($bundle.content_hash))."
+
+# --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (-MergeClaude) ---
+if ($MergeClaude) {
+    $harnessMd = Join-Path $TargetDir "CLAUDE.harness.md"
+    $claudeMd  = Join-Path $TargetDir "CLAUDE.md"
+    if (-not (Test-Path $harnessMd)) {
+        Write-Warning "[merge] CLAUDE.harness.md not found in target -- skipping (bundle may not ship it)"
+    } else {
+        $harnessContent = [System.IO.File]::ReadAllText($harnessMd, $Utf8NoBom)
+        if (-not (Test-Path $claudeMd)) {
+            [System.IO.File]::WriteAllText($claudeMd, $harnessContent, $Utf8NoBom)
+            Write-Output "[MERGE] created CLAUDE.md from CLAUDE.harness.md"
+        } else {
+            $existing = [System.IO.File]::ReadAllText($claudeMd, $Utf8NoBom)
+            if ($existing -match '<!--\s*harness:merged\s*-->') {
+                Write-Output "[SKIP]  CLAUDE.md already contains harness governance (sentinel found -- skipping)"
+            } else {
+                $sep = "`n`n---`n<!-- harness:merged -->`n`n"
+                [System.IO.File]::WriteAllText($claudeMd, $existing.TrimEnd() + $sep + $harnessContent, $Utf8NoBom)
+                Write-Output "[MERGE] appended harness governance to existing CLAUDE.md"
+            }
+        }
+    }
+}
