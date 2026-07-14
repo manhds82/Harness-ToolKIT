@@ -32,7 +32,7 @@ $PROJECTS = @(
     [pscustomobject]@{ Name="HarnessAI-ToolKIT";      Path="E:\SourceCode\HarnessAI-ToolKIT";      SkipInstall=$true  },
     [pscustomobject]@{ Name="DatabaseManager";        Path="E:\SourceCode\DatabaseManager";        SkipInstall=$false },
     [pscustomobject]@{ Name="CodeProvider";           Path="E:\SourceCode\CodeProvider";           SkipInstall=$false },
-    [pscustomobject]@{ Name="AllIn1Site";             Path="E:\SourceCode\AllIn1Site";             SkipInstall=$false },
+    [pscustomobject]@{ Name="AllIn1Site";             Path="E:\SourceCode\AllIn1Site";             SkipInstall=$false }
 )
 
 # Files that may be outdated from a previous install -- safe to delete before
