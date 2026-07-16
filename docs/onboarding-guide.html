@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onboarding — Từ git clone đến Control Portal</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --panel: #ffffff; --text: #1f2430; --muted: #6b7280;
+    --border: #dfe2e8; --accent: #3455db; --accent-bg: rgba(52,85,219,.08);
+    --green: #1a7a3c; --green-bg: rgba(26,122,60,.08);
+    --amber: #9a6a00; --amber-bg: rgba(154,106,0,.08);
+    --red: #b3261e; --red-bg: rgba(179,38,30,.07);
+    --code-bg: #f0f1f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --panel: #1d2027; --text: #e6e8ee; --muted: #9aa1ad;
+      --border: #333845; --accent: #7d95f2; --accent-bg: rgba(125,149,242,.12);
+      --green: #58c07f; --green-bg: rgba(88,192,127,.1);
+      --amber: #d9a94a; --amber-bg: rgba(217,169,74,.1);
+      --red: #e57373; --red-bg: rgba(229,115,115,.1);
+      --code-bg: #262a33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.65 system-ui, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 1.95rem; line-height: 1.25; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 28px; }
+  h2 { font-size: 1.32rem; margin: 46px 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--accent-bg); }
+  h2 .num { display: inline-block; min-width: 1.7em; color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.06rem; margin: 22px 0 8px; }
+  p, li { max-width: 74ch; }
+  code { background: var(--code-bg); border-radius: 4px; padding: 2px 6px;
+         font: 0.875em/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; word-break: break-word; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; position: relative;
+        font: 0.85rem/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  pre .cmt { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+  .callout { border-radius: 8px; padding: 12px 16px; margin: 14px 0; border: 1px solid; }
+  .callout.ok   { background: var(--green-bg);  border-color: var(--green); }
+  .callout.warn { background: var(--amber-bg);  border-color: var(--amber); }
+  .callout.info { background: var(--accent-bg); border-color: var(--accent); }
+  .callout > strong:first-child { display: block; margin-bottom: 4px; }
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 22px; margin: 8px 0 8px; }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .step { display: flex; gap: 14px; margin: 20px 0; }
+  .step-n { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+            color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .step-body { min-width: 0; flex: 1; }
+  .step-body h3 { margin: 4px 0 8px; }
+  .diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+             padding: 18px; overflow-x: auto; margin: 16px 0;
+             font: 0.8rem/1.45 ui-monospace, Consolas, monospace; white-space: pre; }
+  kbd { background: var(--panel); border: 1px solid var(--border); border-bottom-width: 2px;
+        border-radius: 4px; padding: 1px 6px; font-size: .85em; }
+  footer { margin-top: 56px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+  .fill { color: var(--red); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Onboarding: từ <code>git clone</code> đến Control Portal</h1>
+<p class="subtitle">Hướng dẫn từng bước cho người mới — lấy source về, cài governance, và đưa số liệu lên Portal.</p>
+
+<div class="callout info">
+  <strong>Bạn sẽ mất bao lâu?</strong>
+  Khoảng 5–10 phút/project. Những chỗ cần thay giá trị của bạn được tô <span class="fill">màu đỏ</span>,
+  ví dụ <span class="fill">&lt;TÊN-PROJECT&gt;</span>. Mọi lệnh đều copy-paste được.
+</div>
+
+<div class="toc">
+  <strong>Nội dung</strong>
+  <ol>
+    <li><a href="#s0">Chuẩn bị (cài sẵn 1 lần)</a></li>
+    <li><a href="#s1">Lấy source về từ Git</a></li>
+    <li><a href="#s2">Tạo project trên Portal &amp; lấy thông tin</a></li>
+    <li><a href="#s3">Cài + cấu hình bằng 1 lệnh</a></li>
+    <li><a href="#s4">Kiểm tra đã lên Portal</a></li>
+    <li><a href="#s5">Từ giờ về sau (tự động)</a></li>
+    <li><a href="#s6">Cách thủ công (nếu không dùng script)</a></li>
+    <li><a href="#s7">Troubleshooting</a></li>
+    <li><a href="#s8">Câu hỏi thường gặp</a></li>
+  </ol>
+</div>
+
+<h2 id="s0"><span class="num">0</span>Chuẩn bị (cài sẵn 1 lần trên máy)</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Cần có</th><th>Kiểm tra</th><th>Nếu thiếu</th></tr>
+  <tr><td><b>Git</b></td><td><code>git --version</code></td><td>Cài tại git-scm.com</td></tr>
+  <tr><td><b>PowerShell</b> (Windows có sẵn)</td><td><code>$PSVersionTable.PSVersion</code></td><td>Windows đã có sẵn 5.1</td></tr>
+  <tr><td><b>Python 3</b> (cho hook token-sampler)</td><td><code>python --version</code></td><td>Cài tại python.org (tick "Add to PATH")</td></tr>
+  <tr><td><b>Tài khoản Portal</b> (quyền Admin)</td><td>Đăng nhập được trang Portal</td><td>Nhờ admin tổ chức cấp / mời</td></tr>
+</table>
+</div>
+
+<h2 id="s1"><span class="num">1</span>Lấy source về từ Git</h2>
+<p>Mở PowerShell, vào thư mục chứa code của bạn rồi clone:</p>
+<pre><code><span class="cmt"># vào ổ/thư mục bạn muốn chứa project (vd E:\SourceCode)</span>
+cd E:\SourceCode
+
+<span class="cmt"># clone project cần quản trị</span>
+git clone &lt;<span class="fill">URL-GIT-CUA-PROJECT</span>&gt;
+
+<span class="cmt"># và clone bộ toolkit governance (chứa bundle + script cài)</span>
+git clone https://github.com/manhds82/Harness-ToolKIT.git</code></pre>
+<div class="callout info">
+  <strong>Toolkit dùng để làm gì?</strong>
+  Repo <code>Harness-ToolKIT</code> chứa <b>bundle governance</b> (bộ hooks + script) và các
+  script cài đặt. Bạn "cài" bundle này vào từng project để project có khả năng ghi telemetry
+  và đẩy lên Portal.
+</div>
+
+<h2 id="s2"><span class="num">2</span>Tạo project trên Portal &amp; lấy thông tin</h2>
+<div class="step"><div class="step-n">a</div><div class="step-body">
+  <h3>Đăng nhập Portal → tạo project</h3>
+  <p>Mở <code>https://<span class="fill">YOUR-PORTAL-HOST</span></code> → trang <b>Projects</b> →
+  <b>+ New Project</b> → đặt tên (nên trùng tên thư mục cho dễ nhớ) → tạo.</p>
+</div></div>
+<div class="step"><div class="step-n">b</div><div class="step-body">
+  <h3>Vào project → tab Settings → mục "Push telemetry"</h3>
+  <p>Bạn cần <b>2 giá trị</b> ở đây:</p>
+  <ul>
+    <li><b>project_id</b> — nằm trong đoạn snippet mẫu (copy được).</li>
+    <li><b>ingest key</b> — bấm <b>Reveal ingest key</b> → <b>Copy</b>. Đây là "mật khẩu" để đẩy dữ liệu.</li>
+  </ul>
+</div></div>
+<div class="callout warn">
+  <strong>Bảo mật key</strong>
+  Ingest key là bí mật cấp project. Không commit lên git, không gửi qua chat/email.
+  Mỗi project có key riêng — không dùng chung. Lỡ lộ thì bấm <b>Rotate key</b> để đổi.
+</div>
+
+<h2 id="s3"><span class="num">3</span>Cài + cấu hình bằng 1 lệnh</h2>
+<p>Đây là cách nhanh nhất — 1 lệnh làm hết: cài hooks + ghi cấu hình + lưu key + test đẩy thử.</p>
+<pre><code>powershell -File E:\SourceCode\Harness-ToolKIT\setup-portal-sync.ps1 `
+  -ProjectDir "E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>" `
+  -ProjectId  "<span class="fill">&lt;PROJECT_ID&gt;</span>" `
+  -IngestKey  "<span class="fill">&lt;KEY&gt;</span>" `
+  -PortalUrl  "https://<span class="fill">YOUR-PORTAL-HOST</span>"</code></pre>
+<p>Script sẽ tự động:</p>
+<ol>
+  <li>Cài bundle governance v1.2.1 (hooks + client push) vào project.</li>
+  <li>Ghi <code>.harness/portal-sync.json</code> (portal_url + project_id).</li>
+  <li>Ghi <code>.harness/portal-sync.key</code> (chỉ chứa key, đã tự gitignore).</li>
+  <li>Test đẩy thử lên Portal ngay.</li>
+</ol>
+<div class="callout ok">
+  <strong>Kết quả mong đợi</strong>
+  Dòng cuối in ra: <code>[push-telemetry] OK: actions=… incidents=… usage=…</code>.
+  Nếu thấy <code>actions=0</code> là <b>bình thường</b> — nghĩa là kết nối OK nhưng project chưa có
+  dữ liệu (bạn chưa chạy phiên làm việc AI nào trong nó). Xem mục 5.
+</div>
+
+<h2 id="s4"><span class="num">4</span>Kiểm tra đã lên Portal</h2>
+<p>Mở Portal → trang <b>Projects</b> → tìm project của bạn. Các cột
+<b>Tokens / Tokens 24h / Errors / Prompts / Blocked</b> sẽ hiện số.
+Có thể bấm <b>⟳ Sync now</b> để refresh, hoặc bấm tiêu đề cột để sắp xếp.</p>
+
+<h2 id="s5"><span class="num">5</span>Từ giờ về sau — hoàn toàn tự động</h2>
+<div class="diagram">Ban lam viec voi Claude Code trong project
+        │
+        ▼  (hooks tu ghi telemetry vao .harness/)
+   ket thuc session
+        │
+        ▼  hook SessionEnd tu chay push-telemetry
+   ┌─────────────────────┐
+   │  Control Portal      │  ← so lieu tu cap nhat
+   └─────────────────────┘</div>
+<p>Sau khi đã cấu hình, bạn <b>không cần làm gì thêm</b>: mỗi lần kết thúc một phiên Claude Code
+trong project, telemetry tự động đẩy lên Portal.</p>
+<p>Muốn đẩy ngay không đợi kết thúc phiên:</p>
+<pre><code>powershell -File E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>\.harness\scripts\powershell\push-telemetry.ps1</code></pre>
+
+<h2 id="s6"><span class="num">6</span>Cách thủ công (nếu không muốn dùng script tổng)</h2>
+<p>Nếu thích làm từng bước rõ ràng:</p>
+<div class="step"><div class="step-n">1</div><div class="step-body">
+  <h3>Cài bundle vào project</h3>
+  <pre><code>powershell -File E:\SourceCode\Harness-ToolKIT\install.ps1 `
+  -BundleFile E:\SourceCode\Harness-ToolKIT\standard-governance-1.2.1.bundle.json `
+  -TargetDir  "E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>" -Force -MergeClaude</code></pre>
+</div></div>
+<div class="step"><div class="step-n">2</div><div class="step-body">
+  <h3>Tạo file cấu hình</h3>
+  <p>Tạo <code>E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>\.harness\portal-sync.json</code>:</p>
+  <pre><code>{
+  "portal_url": "https://<span class="fill">YOUR-PORTAL-HOST</span>",
+  "project_id": "<span class="fill">&lt;PROJECT_ID&gt;</span>"
+}</code></pre>
+</div></div>
+<div class="step"><div class="step-n">3</div><div class="step-body">
+  <h3>Dán key</h3>
+  <p>Tạo <code>…\.harness\portal-sync.key</code> — <b>toàn bộ nội dung file chỉ là cái key, đúng 1 dòng</b>,
+  không dấu ngoặc, không gì khác. Lưu lại.</p>
+</div></div>
+<div class="step"><div class="step-n">4</div><div class="step-body">
+  <h3>Đẩy thử</h3>
+  <pre><code>powershell -File E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>\.harness\scripts\powershell\push-telemetry.ps1</code></pre>
+</div></div>
+
+<h2 id="s7"><span class="num">7</span>Troubleshooting</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Hiện tượng</th><th>Nguyên nhân &amp; cách xử lý</th></tr>
+  <tr><td><code>Push failed: 401</code></td>
+      <td>Key sai hoặc nhầm project. Vào Portal đúng project → Reveal ingest key → copy lại → dán lại vào <code>portal-sync.key</code>.</td></tr>
+  <tr><td><code>Push failed: 403</code></td>
+      <td>Tường lửa/CDN chặn. Client bản v1.2.1 đã gửi User-Agent riêng; đảm bảo bạn cài bản ≥ 1.2.1.</td></tr>
+  <tr><td><code>portal-sync.json not configured</code></td>
+      <td>Chưa có file cấu hình. Chạy lại lệnh ở mục 3, hoặc tạo file theo mục 6.</td></tr>
+  <tr><td><code>OK: actions=0</code> hoài</td>
+      <td>Chưa chạy Claude Code trong project → chưa có telemetry để đẩy. Cứ làm việc bình thường rồi đẩy lại.</td></tr>
+  <tr><td>Portal vẫn thấy 0</td>
+      <td>Bấm <b>⟳ Sync now</b> trên trang Projects. Với project trên máy cá nhân, số chỉ lên sau khi <i>push</i>.</td></tr>
+  <tr><td><code>python not found</code> khi chạy hook</td>
+      <td>Cài Python 3 và tick "Add to PATH". Hook token-sampler cần Python để đọc transcript.</td></tr>
+</table>
+</div>
+
+<h2 id="s8"><span class="num">8</span>Câu hỏi thường gặp</h2>
+<h3>Project của tôi ở ổ E:\ (Windows) — có sync được không?</h3>
+<p>Được. Portal không đọc trực tiếp ổ E: của bạn; thay vào đó máy bạn <b>đẩy (push)</b> telemetry lên
+qua API. Đó chính là vai trò của <code>portal-sync.json</code> + <code>portal-sync.key</code>.</p>
+
+<h3>Nhiều project thì làm sao cho nhanh?</h3>
+<p>Làm lần lượt mỗi project 1 lần lệnh ở mục 3 (mỗi project 1 project_id + key riêng). Sau đó tất cả tự động.</p>
+
+<h3>Số liệu Tokens có phải hoá đơn chính xác không?</h3>
+<p>Không — đây là số liệu <b>ước lượng</b> đọc từ transcript của phiên làm việc (đủ tốt để theo dõi xu hướng),
+không phải hoá đơn billing.</p>
+
+<h3>Có cần chạy gì trên server không?</h3>
+<p>Không. Toàn bộ chạy trên máy của bạn. Server chỉ nhận dữ liệu bạn đẩy lên.</p>
+
+<footer>
+  Harness AI Toolkit · standard-governance bundle ≥ 1.2.1 · Tài liệu onboarding.
+  Thay <span class="fill">YOUR-PORTAL-HOST</span> / <span class="fill">&lt;PROJECT_ID&gt;</span> /
+  <span class="fill">&lt;KEY&gt;</span> bằng giá trị thật lấy từ tab Settings của project trên Portal.
+</footer>
+</div>
+</body>
+</html>
