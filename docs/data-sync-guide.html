@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hướng dẫn Data Sync — Harness Control Portal</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --panel: #ffffff; --text: #1f2430; --muted: #6b7280;
+    --border: #dfe2e8; --accent: #3455db; --accent-bg: rgba(52,85,219,.08);
+    --green: #1a7a3c; --green-bg: rgba(26,122,60,.08);
+    --amber: #9a6a00; --amber-bg: rgba(154,106,0,.08);
+    --red: #b3261e; --red-bg: rgba(179,38,30,.07);
+    --code-bg: #f0f1f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --panel: #1d2027; --text: #e6e8ee; --muted: #9aa1ad;
+      --border: #333845; --accent: #7d95f2; --accent-bg: rgba(125,149,242,.12);
+      --green: #58c07f; --green-bg: rgba(88,192,127,.1);
+      --amber: #d9a94a; --amber-bg: rgba(217,169,74,.1);
+      --red: #e57373; --red-bg: rgba(229,115,115,.1);
+      --code-bg: #262a33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 32px; }
+  h2 {
+    font-size: 1.3rem; margin: 44px 0 12px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent-bg);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+  p, li { max-width: 70ch; }
+  code {
+    background: var(--code-bg); border-radius: 4px; padding: 2px 6px;
+    font: 0.875em/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto;
+    font: 0.85rem/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .table-scroll { overflow-x: auto; }
+  .callout { border-radius: 8px; padding: 12px 16px; margin: 14px 0; border: 1px solid; }
+  .callout.ok    { background: var(--green-bg); border-color: var(--green); }
+  .callout.warn  { background: var(--amber-bg); border-color: var(--amber); }
+  .callout.risk  { background: var(--red-bg);   border-color: var(--red); }
+  .callout.info  { background: var(--accent-bg); border-color: var(--accent); }
+  .callout > strong:first-child { display: block; margin-bottom: 4px; }
+  .diagram {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; overflow-x: auto; margin: 16px 0;
+    font: 0.8rem/1.45 ui-monospace, Consolas, monospace; white-space: pre;
+  }
+  .step { display: flex; gap: 14px; margin: 18px 0; }
+  .step-n {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-body { min-width: 0; flex: 1; }
+  .step-body h3 { margin: 3px 0 6px; }
+  .pill {
+    display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: .78rem;
+    font-weight: 600; vertical-align: 1px;
+  }
+  .pill.ps   { background: var(--accent-bg); color: var(--accent); }
+  .pill.sh   { background: var(--green-bg);  color: var(--green); }
+  footer { margin-top: 56px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Hướng dẫn Data Sync lên Control Portal</h1>
+<p class="subtitle">Toolkit Harness AI · pipeline telemetry → Portal · cập nhật 2026-07-16</p>
+
+<div class="callout info">
+  <strong>Tóm tắt 30 giây</strong>
+  Hooks của harness tự ghi telemetry (token, tool call, lệnh bị chặn) vào <code>.harness/</code> của mỗi project.
+  Portal lấy data đó bằng <b>2 đường</b>: (A) project nằm trên server → backend tự đọc file mỗi 5 phút;
+  (B) project trên máy dev (Windows <code>E:\…</code>) → máy dev <b>tự đẩy (push)</b> lên API mỗi khi kết thúc session.
+  Cả 2 đường đều idempotent — đẩy trùng không double-count.
+</div>
+
+<h2><span class="num">1</span>Kiến trúc tổng thể</h2>
+
+<div class="diagram">MÁY DEV (Windows E:\...)                      SERVER
+┌─────────────────────────────┐             ┌──────────────────────────────┐
+│ Claude Code session          │             │ Project tại /opt/&lt;project&gt;   │
+│  ├ PreToolUse  → guard       │             │  (hooks bash ghi y hệt)      │
+│  ├ PostToolUse → ledger      │             │        │ backend đọc trực    │
+│  ├ SubagentStop→ sampler     │             │        ▼ tiếp (mount :ro)    │
+│  └ SessionEnd  → sampler     │             │ ┌──────────────────────────┐ │
+│       │            + PUSH ───┼── HTTPS ──► │ │ Portal backend           │ │
+│       ▼                      │  X-Ingest-  │ │  auto-ingest mỗi 5 phút  │ │
+│ .harness/telemetry/*.log     │  Key        │ │  + POST /api/ingest/{id} │ │
+│ .harness/ledger/chain.jsonl  │             │ │  → PostgreSQL → UI stats │ │
+└─────────────────────────────┘             │ └──────────────────────────┘ │
+                                            └──────────────────────────────┘</div>
+
+<h3>Hooks ghi gì, Portal đọc gì</h3>
+<div class="table-scroll">
+<table>
+  <tr><th>Hook (event)</th><th>Script</th><th>Ghi vào file</th><th>Thành cột nào trên Portal</th></tr>
+  <tr>
+    <td>SubagentStop / SessionEnd</td>
+    <td><code>agentops-sampler</code></td>
+    <td><code>.harness/telemetry/agentops.log</code><br>(token thật đọc từ transcript, gồm cả cache)</td>
+    <td><b>Tokens</b>, <b>Tokens 24h</b></td>
+  </tr>
+  <tr>
+    <td>PostToolUse</td>
+    <td><code>harness-post-tool-use</code></td>
+    <td><code>.harness/ledger/chain.jsonl</code> (entry allow, hash-chain C9)<br><code>.harness/telemetry/tool-calls.log</code> (fallback)</td>
+    <td><b>Prompts</b></td>
+  </tr>
+  <tr>
+    <td>PreToolUse (khi chặn)</td>
+    <td><code>harness-runtime-guard</code></td>
+    <td><code>.harness/telemetry/security-events.jsonl</code><br><code>.harness/ledger/chain.jsonl</code> (entry deny)</td>
+    <td><b>Errors</b>, <b>Blocked</b></td>
+  </tr>
+</table>
+</div>
+
+<div class="callout warn">
+  <strong>Trung thực về giới hạn (nguyên tắc C10)</strong>
+  Cột Tokens là số liệu <b>best-effort đọc từ transcript của hooks</b> (Tier-2 agentic), không phải số liệu
+  metered tại proxy — dùng để theo dõi xu hướng, không phải hoá đơn. Token của một session chỉ được ghi khi
+  session <b>kết thúc</b> (hoặc subagent dừng), nên số liệu trễ theo session, không realtime.
+</div>
+
+<h2><span class="num">2</span>Đường A — Project nằm trên server</h2>
+<p>Không cần làm gì cả. Điều kiện đủ (đã setup sẵn cho các project hiện có):</p>
+<ul>
+  <li>Project đã cài bundle <code>standard-governance ≥ 1.2.0</code> (hooks bash mới).</li>
+  <li>Trường <b>harness_root_ref</b> của project trên Portal trỏ đúng path Linux (vd <code>/opt/&lt;project&gt;</code>).</li>
+  <li>Backend container mount thư mục chứa project ở chế độ read-only (<code>/opt:/opt:ro</code> trong compose overlay của server).</li>
+</ul>
+<p>Backend tự ingest mỗi 5 phút (đổi qua env <code>AUTO_INGEST_INTERVAL_SECONDS</code>, <code>0</code> = tắt).
+Muốn sync ngay: trang <b>Projects</b> → nút <b>⟳ Sync now</b>.</p>
+
+<h2><span class="num">3</span>Đường B — Project trên máy dev (Windows)</h2>
+<p>Backend không bao giờ đọc được ổ <code>E:\</code> của bạn — thay vào đó máy dev tự đẩy telemetry lên qua
+API push. Setup <b>một lần cho mỗi project</b>, sau đó hoàn toàn tự động:</p>
+
+<div class="step"><div class="step-n">1</div><div class="step-body">
+  <h3>Tạo file config <code>.harness/portal-sync.json</code></h3>
+  <pre><code>{
+  "portal_url": "https://&lt;portal-host&gt;",
+  "project_id": "&lt;project-id&gt;"
+}</code></pre>
+  <p><code>&lt;project-id&gt;</code> lấy từ Portal: mở project → tab <b>Settings</b> → mục
+  <b>Push telemetry</b> có sẵn snippet đúng để copy nguyên văn. File này đã được gitignore
+  (chứa host nội bộ — không commit).</p>
+</div></div>
+
+<div class="step"><div class="step-n">2</div><div class="step-body">
+  <h3>Lấy ingest key và lưu vào <code>.harness/portal-sync.key</code></h3>
+  <p>Portal → project → <b>Settings</b> → <b>Push telemetry</b> → <b>Reveal ingest key</b> → <b>Copy</b> →
+  dán vào file <code>.harness/portal-sync.key</code> (đúng 1 dòng). File này đã gitignore — key
+  <b>không bao giờ</b> được commit (nguyên tắc C5). Có thể dùng env
+  <code>HARNESS_PORTAL_INGEST_KEY</code> thay cho file.</p>
+</div></div>
+
+<div class="step"><div class="step-n">3</div><div class="step-body">
+  <h3>Xong — mỗi session tự đẩy</h3>
+  <p>Hook SessionEnd tự chạy <code>push-telemetry</code> <span class="pill ps">PS</span>
+  <span class="pill sh">bash</span> khi bạn đóng session Claude Code. Muốn đẩy tay bất kỳ lúc nào:</p>
+  <pre><code># Windows
+powershell -File .harness\scripts\powershell\push-telemetry.ps1
+
+# macOS / Linux
+bash .harness/scripts/bash/push-telemetry.sh</code></pre>
+  <p>Output mong đợi: <code>[push-telemetry] OK: actions=… incidents=… usage=… tool_calls=…</code></p>
+</div></div>
+
+<div class="callout ok">
+  <strong>Idempotent — đẩy lại thoải mái</strong>
+  Client luôn gửi toàn bộ nội dung file; server dedupe theo hash (ledger entry hash, event_id,
+  session_id+agent). Đẩy 10 lần cùng data → vẫn chỉ 1 bản ghi. Mất mạng lúc đẩy cũng không sao —
+  lần đẩy sau tự bù đủ.
+</div>
+
+<h3>Project mới chưa có harness?</h3>
+<pre><code># cài bundle governance vào project (từ checkout toolkit)
+powershell -File tools\harness-bundle\install.ps1 -TargetDir D:\path\to\your-project -MergeClaude
+# (bash: tools/harness-bundle/install.sh --bundle &lt;file&gt; --target &lt;dir&gt; --merge-claude)</code></pre>
+<p>Sau đó tạo project trên Portal (lấy project-id) và làm 3 bước ở trên.</p>
+
+<h2><span class="num">4</span>API push (tham khảo kỹ thuật)</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Endpoint</th><th>Auth</th><th>Body</th></tr>
+  <tr>
+    <td><code>POST /api/ingest/{project_id}</code></td>
+    <td>Header <code>X-Ingest-Key</code> (so sánh constant-time; không bao giờ đặt key trong URL)</td>
+    <td>JSON: <code>agentops</code>, <code>chain_jsonl</code>, <code>security_events</code>,
+        <code>tool_calls</code> — nội dung raw của từng file, tối đa 10&nbsp;MB/file</td>
+  </tr>
+  <tr>
+    <td><code>GET /api/admin/projects/{id}/ingest-key</code></td>
+    <td>JWT admin (member không bao giờ thấy key)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td><code>POST /api/admin/projects/{id}/rotate-ingest-key</code></td>
+    <td>JWT admin</td>
+    <td>— (đổi key: mọi máy dev phải cập nhật lại file key)</td>
+  </tr>
+  <tr>
+    <td><code>POST /api/admin/projects/ingest-all</code></td>
+    <td>JWT admin</td>
+    <td>— (nút "Sync now" — chỉ ingest đường filesystem của org mình)</td>
+  </tr>
+</table>
+</div>
+
+<h2><span class="num">5</span>Troubleshooting</h2>
+<div class="table-scroll">
+<table>
+  <tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách xử lý</th></tr>
+  <tr>
+    <td><code>403 Forbidden</code> khi push</td>
+    <td>CDN/WAF (Cloudflare) chặn User-Agent lạ</td>
+    <td>Client bản mới đã gửi UA <code>harness-push-telemetry/1.0</code> — cập nhật script push
+        (bundle ≥ 1.2.0). Nếu vẫn 403: kiểm tra WAF rule cho phép UA này.</td>
+  </tr>
+  <tr>
+    <td><code>401 Unauthorized</code></td>
+    <td>Sai/thiếu ingest key, hoặc sai project_id</td>
+    <td>Reveal lại key trên Portal, dán lại vào <code>.harness/portal-sync.key</code>. 401 đồng nghĩa
+        transport đã thông — chỉ sai thông tin xác thực.</td>
+  </tr>
+  <tr>
+    <td>Push OK nhưng counts toàn 0</td>
+    <td>Data đã được ingest trước đó (dedupe), hoặc file telemetry local trống</td>
+    <td>Bình thường. Chạy thêm session mới rồi push lại; hoặc kiểm tra
+        <code>.harness/telemetry/</code> có file chưa.</td>
+  </tr>
+  <tr>
+    <td>Cột stats trên Portal = 0 với project server</td>
+    <td><b>harness_root_ref</b> sai path, hoặc backend không mount được thư mục</td>
+    <td>Settings → sửa path Linux đúng; kiểm tra compose overlay có mount
+        <code>:ro</code> thư mục chứa project.</td>
+  </tr>
+  <tr>
+    <td>Tokens = 0 dù session chạy nhiều</td>
+    <td>Session chưa kết thúc, hoặc sampler bản cũ (đọc field không tồn tại)</td>
+    <td>Token chỉ ghi khi SessionEnd/SubagentStop. Cập nhật hooks bundle ≥ 1.2.0
+        (sampler mới đọc transcript).</td>
+  </tr>
+  <tr>
+    <td>Push từ máy dev bị treo lâu</td>
+    <td>File telemetry quá lớn (&gt;10MB) hoặc mạng chậm</td>
+    <td>Server trả 413 nếu quá 10MB/file. Dọn bớt log cũ bằng
+        <code>rotate-logs</code> script của harness.</td>
+  </tr>
+</table>
+</div>
+
+<h2><span class="num">6</span>Bảo mật</h2>
+<ul>
+  <li><b>Ingest key là secret cấp project</b> — chỉ admin thấy; member không bao giờ thấy (không nằm trong API project thường).</li>
+  <li>Key chỉ đi qua <b>header</b>, không bao giờ qua URL/query (không lọt access log), so sánh constant-time chống timing attack.</li>
+  <li>File <code>.harness/portal-sync.key</code> và <code>.harness/portal-sync.json</code> đều đã gitignore — không bao giờ commit (C5).</li>
+  <li>Nghi ngờ lộ key → <b>Rotate key</b> trên Portal rồi cập nhật lại các máy dev.</li>
+  <li>Ledger <code>chain.jsonl</code> là hash-chain bất biến (C9) — server chỉ đọc, không bao giờ ghi ngược về project.</li>
+</ul>
+
+<footer>
+  Harness AI Toolkit · standard-governance bundle ≥ 1.2.0 · Tài liệu nội bộ — thay
+  <code>&lt;portal-host&gt;</code>/<code>&lt;project-id&gt;</code> bằng giá trị thật của bạn (xem tab Settings của project trên Portal).
+  · © 2026 Dau Sy Manh (manhds@)
+</footer>
+</div>
+</body>
+</html>

@@ -18,8 +18,8 @@
                   * If sentinel is already present: skips silently.
 #>
 param(
-    [Parameter(Mandatory)][string]$BundleFile,
-    [Parameter(Mandatory)][string]$TargetDir,
+    [string]$BundleFile = "",
+    [string]$TargetDir  = ".",
     [switch]$Force = $false,
     [switch]$MergeClaude = $false
 )
@@ -30,6 +30,24 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 function Sha256HexOf([byte[]]$Bytes) {
     $s = [System.Security.Cryptography.SHA256]::Create()
     return ([BitConverter]::ToString($s.ComputeHash($Bytes)) -replace '-', '').ToLower()
+}
+
+# --- Auto-find newest bundle if not specified ---
+if (-not $BundleFile) {
+    $found = Get-ChildItem -Recurse -Filter "*.bundle.json" -ErrorAction SilentlyContinue |
+             Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $found) { throw "No .bundle.json found. Specify -BundleFile <path-or-url>." }
+    $BundleFile = $found.FullName
+    Write-Output "[install] Auto-selected bundle: $BundleFile"
+}
+
+# --- Download if URL ---
+$TempDownload = $null
+if ($BundleFile -match '^https?://') {
+    $TempDownload = [System.IO.Path]::GetTempFileName() + ".bundle.json"
+    Write-Output "[install] Downloading bundle from $BundleFile ..."
+    Invoke-WebRequest -Uri $BundleFile -OutFile $TempDownload -UseBasicParsing
+    $BundleFile = $TempDownload
 }
 
 if (-not (Test-Path $BundleFile)) { throw "Bundle file not found: $BundleFile" }
@@ -104,3 +122,6 @@ if ($MergeClaude) {
         }
     }
 }
+
+# --- Cleanup temp download if used ---
+if ($TempDownload -and (Test-Path $TempDownload)) { Remove-Item $TempDownload -Force }
