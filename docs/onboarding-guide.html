@@ -183,6 +183,17 @@ trong project, telemetry tự động đẩy lên Portal.</p>
 <p>Muốn đẩy ngay không đợi kết thúc phiên:</p>
 <pre><code>powershell -File E:\SourceCode\<span class="fill">&lt;TÊN-PROJECT&gt;</span>\.harness\scripts\powershell\push-telemetry.ps1</code></pre>
 
+<div class="callout ok">
+  <strong>Khuyến nghị: bật auto-push định kỳ (đáng tin cậy nhất)</strong>
+  Hook lúc kết thúc phiên đôi khi không chạy (đóng cửa sổ đột ngột, Ctrl-C…). Để data
+  <b>luôn</b> lên đều mà không phụ thuộc điều đó, cài một Windows Scheduled Task chạy
+  <code>push-all</code> mỗi 15 phút — <b>chạy 1 lần, cover mọi project</b>:
+  <pre><code>powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1</code></pre>
+  Task tự đẩy telemetry của mọi project đã có key, bỏ qua project chưa có data. Xem log:
+  <code>Get-Content "$env:LOCALAPPDATA\HarnessPortal\push-all.log" -Tail 20</code>. Gỡ:
+  thêm <code>-Uninstall</code>.
+</div>
+
 <h2 id="s6"><span class="num">6</span>Cách thủ công (nếu không muốn dùng script tổng)</h2>
 <p>Nếu thích làm từng bước rõ ràng:</p>
 <div class="step"><div class="step-n">1</div><div class="step-body">

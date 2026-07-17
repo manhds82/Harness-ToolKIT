@@ -9,8 +9,8 @@
 # materializes them back into a target project.
 schema_version: "1.0.0"
 name: "standard-governance"
-version: "1.2.1"
-description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (real transcript-based token sampling, ledger-persisted denies) + push-telemetry client for Portal sync, H4 control policies, contract templates, JSON schemas."
+version: "1.2.2"
+description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (real transcript-based token sampling, ledger-persisted denies, context-rich security-event excerpts) + push-telemetry client for Portal sync, H4 control policies, contract templates, JSON schemas."
 maintainer: "Dau Sy Manh <manhds@>"
 
 provides:
