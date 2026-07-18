@@ -9,8 +9,8 @@
 # materializes them back into a target project.
 schema_version: "1.0.0"
 name: "standard-governance"
-version: "1.2.4"
-description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (self-healing transcript-driven token sampling — case-insensitive, recursive incl. subagents; guard fail-open on bad regex; 24 hardened deny patterns for RCE/exfil/persistence) + push-telemetry client for Portal sync, H4 control policies, contract templates, JSON schemas."
+version: "1.2.5"
+description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (self-healing transcript-driven token sampling — case-insensitive, recursive incl. subagents; guard fail-open on bad regex; guard scans shell commands only — no false positives on file writes; 24 hardened deny patterns for RCE/exfil/persistence) + push-telemetry client for Portal sync, H4 control policies, contract templates, JSON schemas."
 maintainer: "Dau Sy Manh <manhds@>"
 
 provides:

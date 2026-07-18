@@ -8,7 +8,7 @@
 set -euo pipefail
 
 PROJECT_DIR=""; PROJECT_ID=""; INGEST_KEY=""
-PORTAL_URL="https://YOUR-PORTAL-HOST"
+PORTAL_URL="https://YOUR-PORTAL-DOMAIN"
 BUNDLE_FILE=""; SKIP_INSTALL=0; SKIP_PUSH=0
 
 TOOL_DIR="$(cd "$(dirname "$0")" && pwd)"

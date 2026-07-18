@@ -21,18 +21,12 @@ $INSTALL = Join-Path $PSScriptRoot "install.ps1"
 $VERIFY  = Join-Path $PSScriptRoot "harness-verify.ps1"
 
 # --- Project list -----------------------------------------------------------
+# EDIT THIS LIST to your own projects before running.
 # SkipInstall = $true  -> already the harness source repo; skip install, verify only
 $PROJECTS = @(
-    [pscustomobject]@{ Name="24hHotnewsAI";          Path="E:\SourceCode\24hHotnewsAI";          SkipInstall=$false },
-    [pscustomobject]@{ Name="claude-code-anyllm";     Path="E:\SourceCode\claude-code-anyllm";     SkipInstall=$false },
-    [pscustomobject]@{ Name="FPT-co-works";           Path="E:\SourceCode\FPT-co-works";           SkipInstall=$false },
-    [pscustomobject]@{ Name="shadowing-app";          Path="E:\SourceCode\shadowing-app";          SkipInstall=$false },
-    [pscustomobject]@{ Name="SynthGora";              Path="E:\SourceCode\SynthGora";              SkipInstall=$false },
-    [pscustomobject]@{ Name="PythonWebOOP_Framework"; Path="E:\SourceCode\PythonWebOOP_Framework"; SkipInstall=$false },
-    [pscustomobject]@{ Name="HarnessAI-ToolKIT";      Path="E:\SourceCode\HarnessAI-ToolKIT";      SkipInstall=$true  },
-    [pscustomobject]@{ Name="DatabaseManager";        Path="E:\SourceCode\DatabaseManager";        SkipInstall=$false },
-    [pscustomobject]@{ Name="CodeProvider";           Path="E:\SourceCode\CodeProvider";           SkipInstall=$false },
-    [pscustomobject]@{ Name="AllIn1Site";             Path="E:\SourceCode\AllIn1Site";             SkipInstall=$false }
+    [pscustomobject]@{ Name="ProjectA";          Path="E:\SourceCode\ProjectA";          SkipInstall=$false },
+    [pscustomobject]@{ Name="ProjectB";          Path="E:\SourceCode\ProjectB";          SkipInstall=$false },
+    [pscustomobject]@{ Name="HarnessAI-ToolKIT"; Path="E:\SourceCode\HarnessAI-ToolKIT"; SkipInstall=$true  }
 )
 
 # Files that may be outdated from a previous install -- safe to delete before

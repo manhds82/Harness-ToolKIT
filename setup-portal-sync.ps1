@@ -9,7 +9,7 @@
 
   Vi du:
     .\setup-portal-sync.ps1 `
-        -ProjectDir "E:\SourceCode\claude-code-anyllm" `
+        -ProjectDir "E:\SourceCode\YourProject" `
         -ProjectId  "00a97c2a...." `
         -IngestKey  "abcd1234...."
 
@@ -25,7 +25,7 @@ param(
     [Parameter(Mandatory)][string]$ProjectDir,
     [Parameter(Mandatory)][string]$ProjectId,
     [Parameter(Mandatory)][string]$IngestKey,
-    [string]$PortalUrl  = "https://YOUR-PORTAL-HOST",
+    [string]$PortalUrl  = "https://YOUR-PORTAL-DOMAIN",
     [string]$BundleFile = "",
     [switch]$SkipInstall,
     [switch]$SkipPush

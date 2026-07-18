@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Harness — Hướng dẫn cài đặt &amp; sync (Step by step)</title>
+<style>
+  :root{
+    --ink:#0E1524; --ink2:#151E30; --panel:#ffffff; --panel2:#f5f7fa;
+    --text:#1b2536; --muted:#586074; --line:#e4e8ef;
+    --accent:#0E7C86; --accent2:#12A3AF; --cyan:#2DD4BF;
+    --code-bg:#0E1524; --code-text:#d7e3ea; --code-tok:#65e0c8;
+    --warn-bg:#fff6e8; --warn-line:#e9a23b; --warn-text:#7a4a05;
+    --sec-bg:#fdeef0; --sec-line:#d1495b; --sec-text:#8a1f2e;
+    --ok-bg:#eafaf3; --ok-line:#12a35f; --ok-text:#0a5f39;
+    --note-bg:#eef4fb; --note-line:#3b7cc9; --note-text:#1d456f;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --panel:#0f1826; --panel2:#131e2f; --text:#dce4ef; --muted:#8b97ab;
+      --line:#22304a; --accent:#2DD4BF; --accent2:#3fe3cf; --cyan:#2DD4BF;
+      --code-bg:#060b14; --code-text:#cdd9e2;
+      --warn-bg:#2a2210; --warn-line:#e9a23b; --warn-text:#f3cd8a;
+      --sec-bg:#2c1216; --sec-line:#e26476; --sec-text:#f4b6bf;
+      --ok-bg:#0d2419; --ok-line:#3fce8b; --ok-text:#8fe6bd;
+      --note-bg:#0f2033; --note-line:#4f8fd6; --note-text:#a9cef4;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--panel2); color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code,kbd,pre,.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
+
+  header.hero{
+    background:linear-gradient(150deg,var(--ink) 0%,var(--ink2) 60%,#0c2230 100%);
+    color:#eaf1f4; padding:44px 28px 40px; border-bottom:3px solid var(--cyan);
+  }
+  header.hero .wrap{max-width:1180px;margin:0 auto}
+  header.hero .eyebrow{letter-spacing:.18em;text-transform:uppercase;font-size:12px;color:var(--cyan);font-weight:700}
+  header.hero h1{margin:.35em 0 .2em;font-size:clamp(24px,3.4vw,38px);line-height:1.15;font-weight:800;text-wrap:balance}
+  header.hero p{margin:0;color:#a9bcc7;max-width:70ch}
+  header.hero .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:10px}
+  header.hero .chip{background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.35);color:#bff3ea;
+    padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600}
+
+  .layout{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:250px 1fr;gap:34px;padding:30px 28px 80px}
+  nav.toc{position:sticky;top:20px;align-self:start;font-size:14px;max-height:calc(100vh - 40px);overflow:auto}
+  nav.toc h4{margin:0 0 8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:7px;border-left:2px solid transparent}
+  nav.toc a:hover{color:var(--text);background:var(--panel)}
+  nav.toc a.step{font-weight:600;color:var(--text)}
+  main{min-width:0}
+
+  section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px 28px;margin-bottom:22px}
+  section > h2{margin:0 0 4px;font-size:22px;font-weight:800;display:flex;align-items:center;gap:12px;scroll-margin-top:18px}
+  .num{flex:0 0 auto;width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-size:16px;font-weight:800}
+  section .lead{color:var(--muted);margin:.2em 0 1.2em}
+  h3{margin:1.4em 0 .5em;font-size:16.5px;font-weight:700}
+  p{margin:.6em 0}
+  ul,ol{margin:.5em 0;padding-left:1.3em}
+  li{margin:.3em 0}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .code{position:relative;background:var(--code-bg);border-radius:10px;margin:.9em 0;border:1px solid rgba(255,255,255,.05)}
+  .code pre{margin:0;padding:16px 46px 16px 18px;overflow-x:auto;color:var(--code-text);font-size:13.5px;line-height:1.6}
+  .code .cmt{color:#6b8494}
+  .code .tok{color:var(--code-tok)}
+  .code button.copy{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.08);color:#cfe;
+    border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:11px;padding:4px 9px;cursor:pointer;font-weight:600}
+  .code button.copy:hover{background:rgba(45,212,191,.22)}
+  .code button.copy.done{background:var(--cyan);color:#04211c;border-color:var(--cyan)}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:12.5px}
+  .path{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13px;color:var(--accent2)}
+
+  .call{border-left:4px solid;border-radius:8px;padding:12px 16px;margin:1em 0;font-size:14.5px}
+  .call b{font-weight:700}
+  .note{background:var(--note-bg);border-color:var(--note-line);color:var(--note-text)}
+  .warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-text)}
+  .sec{background:var(--sec-bg);border-color:var(--sec-line);color:var(--sec-text)}
+  .ok{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok-text)}
+
+  .tblwrap{overflow-x:auto;margin:1em 0}
+  table{border-collapse:collapse;width:100%;font-size:13.8px;min-width:520px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--panel2);font-weight:700;font-size:12.5px;letter-spacing:.02em}
+  td code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12.5px}
+
+  .tree{background:var(--code-bg);color:var(--code-text);border-radius:10px;padding:16px 18px;font-size:13px;line-height:1.7;overflow-x:auto}
+  .tree .d{color:var(--cyan);font-weight:600}
+  .tree .k{color:#f0b968}
+  .tree .c{color:#6b8494}
+
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.02em}
+  .pill.dev{background:rgba(18,163,175,.15);color:var(--accent2);border:1px solid rgba(18,163,175,.4)}
+  .pill.srv{background:rgba(233,162,59,.15);color:var(--warn-line);border:1px solid rgba(233,162,59,.4)}
+
+  footer{max-width:1180px;margin:0 auto;padding:0 28px 60px;color:var(--muted);font-size:13px}
+  @media (max-width:860px){
+    .layout{grid-template-columns:1fr;padding:22px 16px 60px}
+    nav.toc{position:static;max-height:none;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--panel)}
+    section{padding:20px 18px}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">AI Software Development Harness · Toolkit</div>
+    <h1>Cài đặt &amp; đồng bộ dữ liệu lên Control Portal</h1>
+    <p>Hướng dẫn step-by-step: từ <b>clone git</b> → cài bộ governance vào từng project → deploy Portal → add project → <b>sync token / prompt / security</b> lên Portal. Mỗi bước đều có lệnh copy-chạy được. Ai cũng làm theo được.</p>
+    <div class="meta">
+      <span class="chip">Windows · PowerShell</span>
+      <span class="chip">Bundle standard-governance v1.2.5</span>
+      <span class="chip">Self-healing transcript sync</span>
+      <span class="chip">© 2026 Dau Sy Manh</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <h4>Nội dung</h4>
+    <a href="#truoc">Chuẩn bị (prerequisites)</a>
+    <a href="#khainiem">Các file &amp; khái niệm</a>
+    <a class="step" href="#s1">1 · Clone git</a>
+    <a class="step" href="#s2">2 · Cài bộ vào từng project</a>
+    <a class="step" href="#s3">3 · Tạo portal-sync.json / .key</a>
+    <a class="step" href="#s4">4 · Deploy Portal</a>
+    <a class="step" href="#s5">5 · Add / setting project</a>
+    <a class="step" href="#s6">6 · File trên Server &amp; Local</a>
+    <a class="step" href="#s7">7 · Lệnh Sync data</a>
+    <a class="step" href="#s8">8 · Verify &amp; tự động hoá</a>
+    <a href="#newproj">➕ Thêm project mới</a>
+    <a href="#tshoot">Xử lý sự cố</a>
+  </nav>
+
+  <main>
+
+  <section id="truoc">
+    <h2>Chuẩn bị (prerequisites)</h2>
+    <p class="lead">Cài các thứ này một lần trên máy. Máy <b>dev</b> và máy <b>server</b> yêu cầu khác nhau — xem cột.</p>
+    <div class="tblwrap"><table>
+      <tr><th>Thành phần</th><th>Máy Dev <span class="pill dev">DEV</span></th><th>Máy Server (chạy Portal) <span class="pill srv">SERVER</span></th></tr>
+      <tr><td>Git</td><td>✅ Bắt buộc</td><td>✅ Bắt buộc</td></tr>
+      <tr><td>PowerShell 5.1+ (hoặc bash)</td><td>✅ Chạy script cài &amp; sync</td><td>tuỳ chọn</td></tr>
+      <tr><td>Python 3</td><td>✅ Cho “self-healing resample” (đếm token từ transcript)</td><td>—</td></tr>
+      <tr><td>Claude Code CLI</td><td>✅ Công cụ coding sinh ra telemetry</td><td>—</td></tr>
+      <tr><td>Docker + Docker Compose</td><td>—</td><td>✅ Chạy Portal (backend + Postgres + web)</td></tr>
+    </table></div>
+    <div class="call note"><b>Quy ước trong tài liệu:</b> chỗ nào ghi <code>YOUR-PORTAL-DOMAIN</code>, <code>&lt;PROJECT_ID&gt;</code>, <code>&lt;YourProject&gt;</code> → thay bằng giá trị thật của bạn. Toàn bộ ví dụ dùng đường dẫn gốc <span class="path">E:\SourceCode</span> — đổi nếu bạn để nơi khác.</div>
+  </section>
+
+  <section id="khainiem">
+    <h2>Các file &amp; khái niệm cần nắm</h2>
+    <p class="lead">Chỉ có <b>2 file bạn phải tự tạo</b> cho mỗi project; phần còn lại do bộ cài (bundle) sinh ra tự động.</p>
+    <div class="tblwrap"><table>
+      <tr><th>File</th><th>Ai tạo</th><th>Nội dung / vai trò</th><th>Commit git?</th></tr>
+      <tr><td><code>.harness/portal-sync.json</code></td><td>Bạn (hoặc script)</td><td><code>{ "portal_url": "...", "project_id": "..." }</code> — trỏ project local tới đúng project trên Portal</td><td>Có thể (không bí mật)</td></tr>
+      <tr><td><code>.harness/portal-sync.key</code></td><td>Bạn (dán từ Portal)</td><td>1 dòng <b>ingest key</b> — chìa khoá xác thực khi push. <b>BÍ MẬT.</b></td><td class="mono">❌ KHÔNG (đã .gitignore)</td></tr>
+      <tr><td><code>.claude/</code>, <code>.harness/</code>, <code>contracts/</code></td><td>Bundle install</td><td>Hooks, agents, skills, guard scripts, control policies, schemas, push-telemetry…</td><td>Có</td></tr>
+      <tr><td><code>.harness/telemetry/agentops.log</code></td><td>Hook / resample tự sinh</td><td>Token đếm được từ transcript của Claude Code</td><td>❌ KHÔNG</td></tr>
+    </table></div>
+    <div class="call sec"><b>Bảo mật (C5):</b> <code>portal-sync.key</code>, file <code>.env</code>, <code>deploy.vars</code> chứa secret — <b>không bao giờ</b> commit, không dán ra chat/log. Ingest key lấy từ Portal → Project → <i>Settings → Reveal ingest key</i>.</div>
+  </section>
+
+  <section id="s1">
+    <h2><span class="num">1</span> Clone git về</h2>
+    <p class="lead">Lấy toolkit về máy dev — trong đó có bộ cài (bundle) và mọi script.</p>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># Bản public (ai cũng clone được)</span>
+cd E:\SourceCode
+git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre></div>
+    <p>Sau khi clone, bundle mới nhất nằm ở:</p>
+    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json</pre></div>
+    <div class="call note"><b>Ghi chú:</b> repo này chỉ cần clone <b>một lần</b>. Nó không phải project của bạn — nó là “kho” chứa bộ cài để rải vào các project khác.</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="num">2</span> Cài bộ governance vào từng project</h2>
+    <p class="lead">Dùng <code>install.ps1</code> — nó verify hash rồi bung <b>92 file</b> (hooks + scripts + policies + schemas) vào thư mục project của bạn, byte-exact.</p>
+    <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json `
+  -TargetDir  E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span> `
+  -Force -MergeClaude</pre></div>
+    <h3>Sau khi cài, project của bạn có thêm:</h3>
+    <div class="tree">
+<span class="d">&lt;YourProject&gt;/</span>
+├─ <span class="d">.claude/</span>          <span class="c"># hooks (SessionStart/PreToolUse/…), agents, skills, settings.json</span>
+├─ <span class="d">.harness/</span>
+│   ├─ <span class="d">control/</span>      <span class="c"># risk-policy.yaml (24 deny patterns), tool-registry, power-policy…</span>
+│   ├─ <span class="d">scripts/</span>      <span class="c"># push-telemetry.ps1, guard, sampler, ledger…</span>
+│   ├─ <span class="d">schemas/</span>      <span class="c"># JSON Schema cho mọi config (C8)</span>
+│   └─ <span class="d">memory/</span>       <span class="c"># constitution.md</span>
+├─ <span class="d">contracts/</span>       <span class="c"># project / agent / tool-registry / workflow YAML</span>
+└─ <span class="k">CLAUDE.md</span>         <span class="c"># đã merge phần governance (-MergeClaude), an toàn chạy lại</span>
+    </div>
+    <ul>
+      <li><b><code>-Force</code></b>: ghi đè file bundle cũ (an toàn — không đụng code app của bạn).</li>
+      <li><b><code>-MergeClaude</code></b>: chèn phần governance vào <code>CLAUDE.md</code>; có sentinel chống merge trùng, chạy lại nhiều lần không sao.</li>
+    </ul>
+    <div class="call ok"><b>Kết quả bước này:</b> project đã có hooks + guard + push-telemetry. Từ giờ mỗi phiên Claude Code sẽ tự ghi telemetry. Chưa nối Portal — làm ở bước 3.</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="num">3</span> Tạo <code>portal-sync.json</code> &amp; <code>portal-sync.key</code></h2>
+    <p class="lead">Hai file này nối project local ↔ project trên Portal. <code>.json</code> = địa chỉ; <code>.key</code> = chìa khoá. <b>Không có script bí ẩn nào khác</b> — chỉ 2 file này.</p>
+
+    <h3>Cách A — Tạo thủ công (1 project)</h3>
+    <p>Chạy trong thư mục project (đổi domain &amp; project_id cho đúng):</p>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># 3a. file cấu hình (không bí mật)</span>
+$proj = "E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span>"
+$cfg  = '{ "portal_url": "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>", "project_id": "<span class="tok">&lt;PROJECT_ID&gt;</span>" }'
+Set-Content -Path "$proj\.harness\portal-sync.json" -Value $cfg -Encoding utf8
+
+<span class="cmt"># 3b. file key rỗng — sẽ dán key vào ở bước 5</span>
+New-Item -ItemType File -Path "$proj\.harness\portal-sync.key" -Force | Out-Null</pre></div>
+    <p>Rồi mở <span class="path">.harness\portal-sync.key</span>, <b>dán ingest key</b> lấy từ Portal (Project → Settings → Reveal ingest key), lưu lại. Xong.</p>
+
+    <div class="call note"><b>Thay cho file key:</b> có thể đặt biến môi trường <code>HARNESS_PORTAL_INGEST_KEY</code> — push-telemetry ưu tiên biến này trước file. Tiện cho CI, khỏi để key trên đĩa.</div>
+
+    <h3>Cách B — Làm hàng loạt cho mọi project (khuyến nghị)</h3>
+    <p>Nếu bạn có nhiều project, viết 1 script <code>*.local.ps1</code> (đuôi <code>.local.ps1</code> đã được gitignore) liệt kê project → id, cài bundle + ghi <code>portal-sync.json</code> một lượt, rồi dán key vào từng file <code>.key</code>. Mẫu:</p>
+    <div class="code"><button class="copy">Copy</button><pre>$Portal = "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>"
+$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json"
+$Install= "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
+
+$map = @(
+  @{ Dir="ProjectA"; Id="<span class="tok">&lt;PROJECT_ID_A&gt;</span>" },
+  @{ Dir="ProjectB"; Id="<span class="tok">&lt;PROJECT_ID_B&gt;</span>" }
+)
+foreach ($p in $map) {
+  $root = "E:\SourceCode\$($p.Dir)"
+  if (!(Test-Path $root)) { continue }
+  &amp; $Install -BundleFile $Bundle -TargetDir $root -Force -MergeClaude | Out-Null
+  $cfg = "{ ""portal_url"": ""$Portal"", ""project_id"": ""$($p.Id)"" }"
+  Set-Content "$root\.harness\portal-sync.json" $cfg -Encoding utf8
+  if (!(Test-Path "$root\.harness\portal-sync.key")) {
+    New-Item -ItemType File "$root\.harness\portal-sync.key" -Force | Out-Null
+  }
+  Write-Host "OK $($p.Dir) — nhớ dán key vào .harness\portal-sync.key"
+}</pre></div>
+    <div class="call warn"><b>Lưu ý thứ tự:</b> <code>project_id</code> chỉ có sau khi bạn <b>tạo project trên Portal (bước 5)</b>. Nên trình tự thực tế: deploy Portal (bước 4) → tạo project lấy id + key (bước 5) → quay lại điền vào 2 file này.</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="num">4</span> Deploy Portal <span class="pill srv">SERVER</span></h2>
+    <p class="lead">Portal chạy bằng Docker: 1 backend (FastAPI) + 1 Postgres + 2 web (admin / member). Deploy trên server có Docker.</p>
+
+    <h3>4.1 — Lấy source &amp; cấu hình secret</h3>
+    <div class="code"><button class="copy">Copy</button><pre>git clone https://github.com/manhds82/Harness-ToolKIT.git harness-portal
+cd harness-portal/portal
+cp .env.example .env
+<span class="cmt"># Sửa .env: đặt POSTGRES_PASSWORD, JWT_SECRET, KEK master key, SETUP_GATE_KEY…</span>
+<span class="cmt"># KHÔNG commit .env (C5)</span></pre></div>
+
+    <h3>4.2 — Chạy stack</h3>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># Local / thử nghiệm</span>
+docker compose up -d --build
+
+<span class="cmt"># Production (Caddy TLS + không mở port trần + backup Postgres)</span>
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build</pre></div>
+    <p>Migrations (Alembic) chạy tự động khi backend khởi động — không cần lệnh riêng. Kiểm tra:</p>
+    <div class="code"><button class="copy">Copy</button><pre>docker compose ps          <span class="cmt"># 4 service Up</span>
+docker compose logs -f backend</pre></div>
+
+    <h3>4.3 — Khởi tạo lần đầu (bootstrap)</h3>
+    <p>Mở admin UI trên trình duyệt → màn Login yêu cầu <b>Setup gate key</b> để tạo Organization admin đầu tiên (chống người lạ bootstrap). Nhập key đã đặt trong <code>SETUP_GATE_KEY</code>. Sai 5 lần / IP → khoá 8 giờ.</p>
+    <div class="call note"><b>Prod:</b> đặt sau reverse-proxy TLS (Caddyfile có sẵn, tự cấp HTTPS). Secret nạp qua file <code>*_FILE</code>. Chi tiết vận hành xem <a href="server-deploy-runbook.html">server-deploy-runbook.html</a>.</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="num">5</span> Add project &amp; setting trên Portal</h2>
+    <p class="lead">Làm trên <b>Admin UI</b>. Đây là nơi sinh ra <code>project_id</code> và <code>ingest key</code> để điền vào bước 3.</p>
+    <ol>
+      <li><b>Đăng nhập</b> admin (tick <i>Remember me</i> = giữ 7 ngày).</li>
+      <li><b>Projects → New project</b>: đặt tên. Xong sẽ có 1 dòng project — copy <b>Project ID</b>.</li>
+      <li>Vào project → tab <b>Settings → Reveal ingest key</b> → copy <b>ingest key</b> (có nút <i>Rotate</i> nếu cần đổi).
+        <div class="call sec" style="margin-top:8px"><b>Đây là 2 giá trị điền vào bước 3:</b> Project ID → <code>portal-sync.json</code>; ingest key → <code>portal-sync.key</code>.</div>
+      </li>
+      <li><b>Members</b>: add theo email → sinh invite link cho member tự nhận.</li>
+      <li><b>Token Budgets</b>: đặt max tokens / max cost / ngưỡng cảnh báo (%).</li>
+      <li><b>Provider Connections</b>: chọn provider.
+        <div class="tblwrap" style="margin-top:8px"><table>
+          <tr><th>Tier</th><th>Provider</th><th>API key?</th><th>Cách đo token</th></tr>
+          <tr><td><b>Tier 1</b> (metered)</td><td>Anthropic API, OpenAI, Deepseek, Qwen, GLM</td><td>✅ Bắt buộc (mã hoá khi lưu)</td><td>Proxy thật → đếm chính xác</td></tr>
+          <tr><td><b>Tier 2</b> (agentic)</td><td>Claude Code, GitHub Copilot, Codex, Ollama</td><td>❌ Không cần</td><td>Best-effort từ transcript/hook</td></tr>
+        </table></div>
+      </li>
+    </ol>
+    <div class="call ok"><b>Kết quả:</b> project đã tồn tại trên Portal, có budget + provider + members. Giờ quay lại <a href="#s3">bước 3</a> điền id + key vào máy dev.</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="num">6</span> File cần có trên Server vs Local</h2>
+    <p class="lead">Tách bạch để không nhầm: máy dev chỉ giữ 2 file sync; server giữ secret hạ tầng.</p>
+    <div class="tblwrap"><table>
+      <tr><th>Nơi</th><th>File</th><th>Tạo bằng</th><th>Mục đích</th></tr>
+      <tr><td rowspan="2"><span class="pill dev">DEV / LOCAL</span></td>
+          <td><code>.harness/portal-sync.json</code></td><td>Tay / script (bước 3)</td><td>portal_url + project_id</td></tr>
+      <tr><td><code>.harness/portal-sync.key</code></td><td>Dán từ Portal (bước 5)</td><td>ingest key (bí mật)</td></tr>
+      <tr><td rowspan="3"><span class="pill srv">SERVER</span></td>
+          <td><code>portal/.env</code></td><td><code>cp .env.example .env</code> rồi sửa</td><td>DB pass, JWT, KEK, SETUP_GATE_KEY</td></tr>
+      <tr><td><code>portal/Caddyfile</code></td><td>Có sẵn trong repo</td><td>TLS reverse-proxy (prod)</td></tr>
+      <tr><td>(tuỳ chọn) mount <code>/opt:ro</code></td><td>compose override</td><td>Nếu muốn ingest trực tiếp từ checkout trên server thay vì push</td></tr>
+    </table></div>
+    <div class="call note"><b>Máy dev E:\ không đọc được từ server</b> → dùng cơ chế <b>push</b> (POST telemetry lên API). Không cần copy file gì lên server cho từng project — chỉ cần <code>portal-sync.json</code> + <code>.key</code> ở local. Đó là lý do bước 7 tồn tại.</div>
+  </section>
+
+  <section id="s7">
+    <h2><span class="num">7</span> Lệnh Sync data (token / prompt / security) lên Portal</h2>
+    <p class="lead">Có 3 cách, tăng dần độ tiện. Tất cả đều <b>idempotent</b> (chạy lại nhiều lần không nhân đôi — server tự dedupe).</p>
+
+    <h3>7.1 — Push 1 project (thủ công)</h3>
+    <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span>\.harness\scripts\powershell\push-telemetry.ps1</pre></div>
+    <p>Trước khi push, script tự <b>resample transcript</b> của chính project đó (dựng lại <code>agentops.log</code> từ log Claude Code) — nên token được tính đủ <b>kể cả khi hook SessionEnd không chạy</b>.</p>
+
+    <h3>7.2 — Sync TẤT CẢ project một lượt (khuyến nghị)</h3>
+    <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\harness-sync.local.ps1</pre></div>
+    <p>Script này <b>tự quét</b> mọi thư mục dưới <span class="path">E:\SourceCode\*</span> có đủ <code>portal-sync.json</code> + <code>portal-sync.key</code>, resample transcript (khớp không phân biệt hoa/thường ổ đĩa, đệ quy cả subagents), rồi push từng project. <b>Thêm project mới không phải sửa script.</b></p>
+
+    <h3>7.3 — Tự động mỗi 15 phút (Scheduled Task)</h3>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># cài 1 lần — chạy nền, không phụ thuộc bạn có đóng Claude hay không</span>
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1
+
+<span class="cmt"># đổi chu kỳ / gỡ</span>
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1 -IntervalMinutes 10
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1 -Uninstall</pre></div>
+    <div class="call ok"><b>Ngoài ra:</b> mỗi khi một phiên Claude Code kết thúc, hook <b>SessionEnd</b> cũng tự gọi push-telemetry. Vậy có 3 lớp: hook cuối phiên + scheduled task + chạy tay khi cần.</div>
+
+    <h3>Push gửi những gì?</h3>
+    <div class="tblwrap"><table>
+      <tr><th>Nguồn</th><th>Lên Portal thành</th></tr>
+      <tr><td><code>telemetry/agentops.log</code></td><td>Usage events (token in/out, cost, model)</td></tr>
+      <tr><td><code>ledger/chain.jsonl</code></td><td>Action log + số lần bị guard chặn (Blocked)</td></tr>
+      <tr><td><code>telemetry/security-events.jsonl</code></td><td>Security incidents (prompt-injection, secret, guard block)</td></tr>
+      <tr><td><code>telemetry/tool-calls.log</code></td><td>Thống kê tool calls</td></tr>
+    </table></div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="num">8</span> Verify &amp; hiểu con số</h2>
+    <p class="lead">Mở Admin → Projects list. Mỗi chỉ số hiển thị theo <b>Hôm nay / Tháng này / Tất cả</b>.</p>
+    <ul>
+      <li>Cột <b>Tokens</b>, <b>Cost</b>: số nhóm bằng dấu phẩy hàng nghìn; tiền làm tròn đô-la.</li>
+      <li>Cột <b>Errors / Prompts / Blocked</b>: bấm vào số &gt; 0 → nhảy đúng tab chi tiết trong project.</li>
+      <li><b>Last sync</b> cập nhật sau mỗi lần push. Bấm <b>Sync now</b> trên Portal để ingest lại phía server.</li>
+    </ul>
+    <div class="call warn"><b>“Sync 31d ago” không phải lỗi</b> nếu project đó thực sự lâu không chạy — token đến từ <i>transcript thật</i>, tool không bịa dữ liệu. Chạy lại project bằng Claude Code → phiên mới sẽ được sync lên.</div>
+    <p>Kiểm tra nhanh 1 project vừa push:</p>
+    <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\harness-sync.local.ps1
+<span class="cmt"># đọc dòng "OK &lt;project&gt; sessions=.. usage=.. actions=.." trả về từ server</span></pre></div>
+  </section>
+
+  <section id="newproj">
+    <h2>➕ Thêm một project mới (checklist)</h2>
+    <p class="lead">Khi bạn có project mới cần đưa lên Portal — làm đúng 4 bước, ~2 phút.</p>
+    <ol>
+      <li><b>Trên Portal (Admin):</b> Projects → New project → copy <b>Project ID</b> + <b>ingest key</b> (Settings → Reveal).</li>
+      <li><b>Cài bundle</b> vào thư mục project:
+        <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json `
+  -TargetDir E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span> -Force -MergeClaude</pre></div>
+      </li>
+      <li><b>Tạo 2 file sync:</b>
+        <div class="code"><button class="copy">Copy</button><pre>$proj = "E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span>"
+Set-Content "$proj\.harness\portal-sync.json" `
+  '{ "portal_url": "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>", "project_id": "<span class="tok">&lt;NEW_PROJECT_ID&gt;</span>" }' -Encoding utf8
+New-Item -ItemType File "$proj\.harness\portal-sync.key" -Force | Out-Null
+<span class="cmt"># rồi mở portal-sync.key, DÁN ingest key, lưu</span></pre></div>
+      </li>
+      <li><b>Push lần đầu</b> (hoặc chờ scheduled task tự chạy):
+        <div class="code"><button class="copy">Copy</button><pre>powershell -File "$proj\.harness\scripts\powershell\push-telemetry.ps1"</pre></div>
+      </li>
+    </ol>
+    <div class="call ok"><b>Không cần sửa <code>harness-sync.local.ps1</code></b>: lần chạy sau nó tự phát hiện project mới nhờ 2 file <code>portal-sync.*</code>. Scheduled task cũng tự cuốn theo. <b>Không lặp lại lỗi mất sync.</b></div>
+  </section>
+
+  <section id="tshoot">
+    <h2>Xử lý sự cố nhanh</h2>
+    <div class="tblwrap"><table>
+      <tr><th>Triệu chứng</th><th>Nguyên nhân &amp; xử lý</th></tr>
+      <tr><td>Push báo <code>No portal-sync.json</code></td><td>Chưa tạo file cấu hình → làm <a href="#s3">bước 3</a>.</td></tr>
+      <tr><td><code>No ingest key</code></td><td><code>portal-sync.key</code> rỗng → dán key từ Portal (Settings → Reveal), hoặc set env <code>HARNESS_PORTAL_INGEST_KEY</code>.</td></tr>
+      <tr><td>Push <code>403 Forbidden</code></td><td>Sai ingest key (đã rotate?) → Reveal lại &amp; dán key mới. Hoặc project_id sai.</td></tr>
+      <tr><td>Token = 0 dù đã chạy Claude</td><td>Chạy <code>harness-sync.local.ps1</code> (resample từ transcript). Cần Python 3 trên máy.</td></tr>
+      <tr><td>Lệnh của bạn bị guard chặn bất ngờ</td><td>Command trùng deny-pattern. Đổi từ, hoặc dùng <code>git commit -F file</code>. Lưu ý: guard chỉ soi lệnh shell — không soi nội dung file Write/Edit.</td></tr>
+      <tr><td>Portal không lên (docker)</td><td><code>docker compose logs backend</code>; kiểm tra <code>.env</code> đủ secret; port/health.</td></tr>
+    </table></div>
+  </section>
+
+  </main>
+</div>
+
+<footer>
+  AI Software Development Harness · standard-governance v1.2.5 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  <br/>© 2026 Dau Sy Manh (manhds@). Tài liệu nội bộ — thay các placeholder bằng giá trị thật của bạn trước khi dùng.
+</footer>
+
+<script>
+  document.querySelectorAll('.code button.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.parentElement.querySelector('pre');
+      var text = pre.innerText;
+      navigator.clipboard.writeText(text).then(function(){
+        btn.textContent = '✓ Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>
