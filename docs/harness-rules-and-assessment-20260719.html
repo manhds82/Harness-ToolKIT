@@ -108,7 +108,7 @@
 <body>
 <header class="hero">
   <div class="wrap">
-    <div class="eyebrow">AI Software Development Harness · Toolkit · standard-governance v1.2.7</div>
+    <div class="eyebrow">AI Software Development Harness · Toolkit · standard-governance v1.3.0</div>
     <h1>Bộ rule, tính năng &amp; đánh giá trưởng thành CASAN (H1–H7)</h1>
     <p>Tài liệu giới thiệu những gì bộ KIT đã làm — 10 nguyên tắc (C1–C10), 7 tầng Harness, hooks/guard/ledger — kèm bản <b>tự đánh giá theo khung CASAN</b> và các <b>đề xuất cải tiến rule/tính năng</b> mới.</p>
     <div class="meta">
@@ -143,10 +143,10 @@
     <h2>Tóm tắt điều hành</h2>
     <p class="lead">Bộ KIT bọc năng lực coding của agent (Claude Code) trong các tầng identity · policy · evaluation · audit. Đánh giá theo CASAN cho thấy nền tảng vững ở Context/Tool/Security/Governance, còn dư địa ở Evaluation &amp; AgentOps.</p>
     <div class="kpis">
-      <div class="kpi"><div class="v" style="color:var(--strong)">71<span style="font-size:16px;color:var(--muted)">/100</span></div><div class="l">Điểm trung bình</div></div>
+      <div class="kpi"><div class="v" style="color:var(--strong)">78<span style="font-size:16px;color:var(--muted)">/100</span></div><div class="l">Điểm trung bình (v1.3.0)</div></div>
       <div class="kpi"><div class="v">3 → 4</div><div class="l">CASAN Level</div></div>
       <div class="kpi"><div class="v" style="color:var(--good)">0</div><div class="l">Harness ở mức GAP (&lt;30)</div></div>
-      <div class="kpi"><div class="v" style="color:var(--partial)">H6</div><div class="l">Điểm thấp nhất (ceiling)</div></div>
+      <div class="kpi"><div class="v" style="color:var(--good)">H1·75</div><div class="l">Điểm thấp nhất (ceiling)</div></div>
     </div>
     <div class="call note"><b>Nguyên tắc CASAN:</b> <i>Harness thấp nhất quyết định ceiling.</i> Không có tầng nào ở mức GAP nghĩa là KIT đủ điều kiện vận hành Level 3–4; muốn chạm Level 4 vững cần nâng H6 (AgentOps) và H3 (Evaluation), đồng thời chuyển các chốt bảo mật/phê duyệt từ hook cục bộ (defense-in-depth) sang enforcement tại gateway (C10).</div>
   </section>
@@ -267,20 +267,20 @@
 </div>
 
 <footer>
-  AI Software Development Harness · standard-governance v1.2.7 · Đánh giá CASAN 2026-07-19 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  AI Software Development Harness · standard-governance v1.3.0 · Đánh giá CASAN 2026-07-19 · Hooks &gt; rules · Execution ≠ control · No false safety.
   <br/>© 2026 Dau Sy Manh (manhds@). Điểm số là ước lượng tự đánh giá — tinh chỉnh theo hiện trạng thực tế của từng dự án.
 </footer>
 
 <script>
   // ---- H1-H7 self-assessment data ----
   const H = [
-    {id:'H1', name:'Context',       score:70, cls:'t-good',    have:['CLAUDE.md memory','contracts/ YAML','skills L2','SessionStart nạp context'], gap:['pointer-store tự động','RAG / cache tech-stack']},
-    {id:'H2', name:'Tool',          score:78, cls:'t-good',    have:['tool-registry (C3)','deny-by-default','audit per-call'], gap:['idempotency key','rate-limit chính thức']},
-    {id:'H3', name:'Evaluation',    score:68, cls:'t-partial', have:['LLM-as-judge (verify skill)','policy-CI + red-team','prompt_score'], gap:['golden dataset/dự án','regression-gate tự động']},
-    {id:'H4', name:'Security',      score:72, cls:'t-good',    have:['prompt-injection scan','secret scan','30 deny-pattern'], gap:['sandbox/timeout server-side','allowlist outbound']},
-    {id:'H5', name:'Governance',    score:74, cls:'t-good',    have:['ledger hash-chain (C9)','risk registry','workflow DAG'], gap:['approval workflow enforce','compliance report định kỳ']},
-    {id:'H6', name:'AgentOps',      score:66, cls:'t-partial', have:['token/cost per project','security incidents','windowed metrics'], gap:['anomaly alerting','hallucination/drift']},
-    {id:'H7', name:'Orchestration', score:70, cls:'t-good',    have:['fleet 9 agent','workflow contracts','pipeline skills','fan parallel'], gap:['fallback model','transaction rollback']},
+    {id:'H1', name:'Context',       score:75, cls:'t-good',    have:['CLAUDE.md memory','contracts/ YAML','skills L2','context pointer-store policy'], gap:['RAG / cache tech-stack']},
+    {id:'H2', name:'Tool',          score:82, cls:'t-strong',  have:['tool-registry (C3)','deny-by-default','audit per-call','idempotency + rate-limit policy'], gap:['gateway enforce idempotency']},
+    {id:'H3', name:'Evaluation',    score:77, cls:'t-good',    have:['LLM-as-judge (verify skill)','policy-CI + red-team','golden-dataset + regression-gate policy'], gap:['gate enforce server-side']},
+    {id:'H4', name:'Security',      score:80, cls:'t-good',    have:['prompt-injection scan','secret scan','30 deny-pattern','outbound-allowlist policy'], gap:['allowlist enforce @ gateway']},
+    {id:'H5', name:'Governance',    score:80, cls:'t-good',    have:['ledger hash-chain (C9)','risk registry','workflow DAG','approval-required registry'], gap:['approval workflow @ gateway']},
+    {id:'H6', name:'AgentOps',      score:76, cls:'t-good',    have:['token/cost per project','security incidents','anomaly thresholds + hallucination flags'], gap:['live alert delivery @ gateway']},
+    {id:'H7', name:'Orchestration', score:78, cls:'t-good',    have:['fleet 9 agent','workflow contracts','pipeline skills','model fallback + rollback policy'], gap:['runtime wiring of fallback']},
   ];
   const COL = {'t-gap':'#E4572E','t-partial':'#E0A32E','t-good':'#2FA96A','t-strong':'#12A3AF'};
   const scoreColor = s => s<30?COL['t-gap'] : s<61?COL['t-partial'] : s<81?COL['t-good'] : COL['t-strong'];
