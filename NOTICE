@@ -1,0 +1,9 @@
+Harness AI Toolkit — Governance Bundle
+Copyright 2026 Dau Sy Manh <manhds@>
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Authored and maintained by Dau Sy Manh <manhds@>.
+The packaged bundle records the same attribution in its `maintainer` field
+(bundle.yaml / standard-governance-*.bundle.json), so an audit or review skill
+can identify the source of an installed governance setup.

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Portal — Hướng dẫn sử dụng (setup, đo token, đưa dự án local vào quản lý)</title>
+<style>
+  :root{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);
+    --green:#1a7a3c;--green-bg:rgba(26,122,60,.1);--amber:#9a6a00;--amber-bg:rgba(154,106,0,.1);--red:#b3261e;--red-bg:rgba(179,38,30,.08);
+    --code:#0b3d91;--code-bg:#eef1f7;--sans:system-ui,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Consolas,monospace;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}}
+  :root[data-theme="dark"]{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}
+  :root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);--green:#1a7a3c;--amber:#9a6a00;--red:#b3261e;--code:#0b3d91;--code-bg:#eef1f7;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+  h1{font-size:29px;margin:0 0 6px;}h2{font-size:22px;margin:40px 0 12px;padding-top:14px;border-top:2px solid var(--border);}h3{font-size:17px;margin:22px 0 8px;}
+  .sub{color:var(--muted);margin:0 0 8px;}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);color:var(--code);padding:1px 6px;border-radius:5px;}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;}pre code{background:none;color:var(--ink);padding:0;}
+  a{color:var(--accent);}.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:14px 0;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14.5px;}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}th{color:var(--muted);font-weight:600;}
+  .tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;}.t-green{background:var(--green-bg);color:var(--green);}.t-amber{background:var(--amber-bg);color:var(--amber);}
+  .note{border-left:4px solid var(--accent);background:var(--accent-bg);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;}
+  .warn{border-left:4px solid var(--amber);background:var(--amber-bg);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;}
+  ol.big{padding-left:0;list-style:none;counter-reset:s;}ol.big>li{counter-increment:s;position:relative;padding:12px 0 12px 46px;border-bottom:1px dashed var(--border);}
+  ol.big>li::before{content:counter(s);position:absolute;left:0;top:12px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .foot{color:var(--muted);font-size:13px;margin-top:40px;border-top:1px solid var(--border);padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Harness Portal — Hướng dẫn sử dụng</h1>
+  <p class="sub">Setup lần đầu → tạo project → gán budget → connect provider → đo token; và cách <b>đưa một dự án đang chạy local vào quản lý tập trung</b>. Placeholders: admin <code>https://portal.example.com</code>, member <code>https://member.example.com</code>. Author: Dau Sy Manh (<code>manhds@</code>) · Apache-2.0.</p>
+
+  <div class="panel"><b>Portal cho bạn gì:</b> tạo Project → thêm Member → gán Token Budget → connect AI provider (BYOK, key mã hoá) → <b>đo token &amp; chi phí</b> + dashboard (bug/findings, prompt bị chặn, vi phạm, làm-lại). Điều kiện: Portal đã được deploy (xem <a href="server-deploy-runbook.html">runbook triển khai</a>).</p>
+
+  <h2>Phần 1 — Vận hành Portal</h2>
+  <ol class="big">
+    <li><b>First-time setup (Org Admin).</b> Mở admin UI <code>https://portal.example.com</code> → tab <b>First-time setup</b> → tạo Organization + tài khoản Org Admin (bạn tự đặt email + mật khẩu mạnh). Đăng nhập.</li>
+    <li><b>Tạo Project.</b> Ví dụ <code>acme-web</code>. Mỗi project là ranh giới quản lý (member, budget, provider, log riêng).</li>
+    <li><b>Gán Token Budget.</b> Đặt <code>max_tokens_per_session</code>, <code>max_cost_per_session_usd</code>, <code>alert_at_percent</code> (vd 80%). Có thể đặt theo cả project lẫn từng member.</li>
+    <li><b>Connect Provider (BYOK).</b> Tab Providers → chọn provider (Anthropic API / OpenAI / Deepseek / Qwen / GLM = <b>Tier-1 đo token thật</b>; Claude Code / Copilot / Codex = <b>Tier-2 best-effort</b>) → dán API key. Key được <b>mã hoá khi lưu</b> (đọc DB chỉ thấy ciphertext, API luôn mask).</li>
+    <li><b>Đo token.</b> Với connection <b>Tier-1</b>: gửi request qua proxy của Portal — mỗi lần đo <b>chính xác</b> tokens_in/out + chi phí, cộng vào budget, cảnh báo ở ngưỡng, chặn 402 khi cạn. Dùng panel <b>“Try it”</b> trong member UI, hoặc gọi API:
+      <pre><code>POST https://portal.example.com/api/member/projects/{project_id}/proxy/chat
+{ "provider_connection_id":"...", "model":"...", "messages":[{"role":"user","content":"hello"}] }</code></pre></li>
+    <li><b>Thêm Member.</b> Add theo email → Portal sinh <b>invite link</b> (hoặc gửi email nếu bật SMTP) → member mở <code>https://member.example.com/accept-invite?token=...</code> đặt mật khẩu → chỉ thấy project được add, budget/provider (key mask).</li>
+    <li><b>Theo dõi.</b> Dashboard: cost/token theo member+provider, budgets, action log, security incidents, prompt scores, test reports (bấm ingest/scan/run để cập nhật từ checkout).</li>
+  </ol>
+
+  <h2>Phần 2 — Đưa một dự án đang chạy local vào quản lý</h2>
+  <p>Kịch bản: bạn <b>đã</b> có một dự án chạy local (đã dùng nhiều), giờ muốn quản trị nó qua Portal như các service khác trên máy. Harness chạy <b>ngay trong repo dự án</b> (không đổi cách bạn chạy app); Portal <b>đọc lại</b> log/telemetry của repo đó để hiển thị tập trung.</p>
+  <ol class="big">
+    <li><b>Cài governance bundle vào repo dự án</b> (một lần):
+      <pre><code># Windows
+powershell -File install.ps1 -BundleFile standard-governance-1.0.0.bundle.json -TargetDir C:\path\to\my-service
+# macOS/Linux
+bash install.sh --bundle standard-governance-1.0.0.bundle.json --target /path/to/my-service</code></pre>
+      Kiểm đã áp đúng: <code>harness-verify.ps1 -TargetDir C:\path\to\my-service</code> → <code>APPLIED OK</code>. Khởi động lại Claude Code trong repo để hook có hiệu lực.</li>
+    <li><b>Đăng ký dự án trên Portal</b> (tab Settings của project): đặt
+      <ul>
+        <li><code>harness_root_ref</code> = đường dẫn checkout thật của dự án (để Portal ingest log/telemetry của nó).</li>
+        <li><code>gateway_base_url</code> = URL gateway phục vụ checkout đó (nếu dùng đồng bộ qua gateway).</li>
+      </ul></li>
+    <li><b>Ingest lịch sử vào Portal.</b> Bấm <b>Run ingest/scan/run</b> ở các tab → Portal đọc <code>.harness/ledger/chain.jsonl</code> + <code>.harness/telemetry/*</code> của repo → hiển thị: action log, security incidents (prompt bị chặn/vi phạm), prompt scores, source↔doc mapping, test report.</li>
+    <li><b>Gán budget + connect provider</b> cho project (như Phần 1) nếu muốn đo/chặn chi phí.</li>
+    <li><b>Lặp cho từng dự án local khác.</b> Mỗi dự án = 1 project trong Portal; bạn quản lý tập trung nhiều dự án cùng lúc, mỗi cái vẫn chạy độc lập trên máy.</li>
+  </ol>
+
+  <div class="warn"><b>Trung thực về đo token (C10):</b> Portal đo <b>chính xác</b> chỉ với request gửi <b>qua proxy Tier-1</b> của Portal. Token mà Claude Code tiêu khi bạn code trong dự án là <b>Tier-2 best-effort</b> — Portal chỉ ingest xấp xỉ từ ledger/telemetry, <b>không</b> đo tuyệt đối được (giới hạn kỹ thuật, không hứa suông). Muốn con số chi phí chính xác cho một luồng AI → cho luồng đó gọi model qua proxy Tier-1.</div>
+
+  <h2>Bảng nhanh: quản lý gì ở đâu</h2>
+  <table>
+    <tr><th>Muốn</th><th>Nơi</th></tr>
+    <tr><td>Kiểm dự án đã áp harness đúng chưa</td><td><code>harness-verify</code> (local) → APPLIED OK</td></tr>
+    <tr><td>Đo/chặn token &amp; chi phí</td><td>Portal: Budget + Provider (Tier-1) + proxy</td></tr>
+    <tr><td>Xem prompt bị chặn / vi phạm / làm-lại</td><td>Portal: Security / Action Log (ingest từ repo)</td></tr>
+    <tr><td>Xem bug/findings AI phát hiện</td><td>Portal: dashboard findings <span class="tag t-amber">roadmap</span></td></tr>
+    <tr><td>Chặn lệnh nguy hiểm khi code</td><td>Hook trong repo (tự động, sau install)</td></tr>
+  </table>
+
+  <div class="foot">Harness Portal usage guide · © 2026 Dau Sy Manh (<code>manhds@</code>) · Apache-2.0.</div>
+</div>
+</body>
+</html>

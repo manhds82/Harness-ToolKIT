@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Portal — Runbook triển khai lên server (chia sẻ, đa hệ thống)</title>
+<style>
+  :root{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);
+    --green:#1a7a3c;--green-bg:rgba(26,122,60,.1);--amber:#9a6a00;--amber-bg:rgba(154,106,0,.1);--red:#b3261e;--red-bg:rgba(179,38,30,.08);
+    --code:#0b3d91;--code-bg:#eef1f7;--sans:system-ui,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Consolas,monospace;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}}
+  :root[data-theme="dark"]{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}
+  :root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);--green:#1a7a3c;--amber:#9a6a00;--red:#b3261e;--code:#0b3d91;--code-bg:#eef1f7;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+  h1{font-size:29px;margin:0 0 6px;}h2{font-size:22px;margin:40px 0 12px;padding-top:14px;border-top:2px solid var(--border);}h3{font-size:17px;margin:22px 0 8px;}
+  .sub{color:var(--muted);margin:0 0 8px;}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);color:var(--code);padding:1px 6px;border-radius:5px;}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;}pre code{background:none;color:var(--ink);padding:0;}
+  a{color:var(--accent);}.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:14px 0;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14.5px;}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}th{color:var(--muted);font-weight:600;}
+  .note{border-left:4px solid var(--accent);background:var(--accent-bg);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;}
+  .warn{border-left:4px solid var(--amber);background:var(--amber-bg);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;}
+  .danger{border-left:4px solid var(--red);background:var(--red-bg);padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;}
+  ol.big{padding-left:0;list-style:none;counter-reset:s;}ol.big>li{counter-increment:s;position:relative;padding:12px 0 12px 46px;border-bottom:1px dashed var(--border);}
+  ol.big>li::before{content:counter(s);position:absolute;left:0;top:12px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .foot{color:var(--muted);font-size:13px;margin-top:40px;border-top:1px solid var(--border);padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Harness Portal — Runbook triển khai lên server</h1>
+  <p class="sub">Cách deploy Portal (admin + member + backend + Postgres) lên một server Linux <b>đang chạy nhiều hệ thống khác</b> mà không làm hỏng chúng. Placeholders: <code>root@YOUR_SERVER</code>, <code>portal.example.com</code>, <code>member.example.com</code>. Author: Dau Sy Manh (<code>manhds@</code>) · Apache-2.0.</p>
+
+  <div class="panel"><b>Nguyên tắc cô lập (áp dụng xuyên suốt):</b> mọi thứ chạy trong <b>một compose project riêng</b> (network/volume/tên container riêng); container chỉ bind <code>127.0.0.1:&lt;free-port&gt;</code>; <b>không</b> giành :80/:443; reverse-proxy chỉ <b>thêm vhost mới</b>, không sửa vhost cũ. Gỡ sạch = <code>docker compose -p &lt;project&gt; down</code>.</div>
+
+  <h2>Điều kiện</h2>
+  <ul>
+    <li>Server Linux có <b>Docker + docker compose</b>, một <b>reverse proxy</b> (vd nginx) đang giữ :80/:443, và bạn <code>ssh</code> vào được.</li>
+    <li>2 subdomain (hoặc 1) đã trỏ DNS về server: <code>portal.example.com</code> (admin), <code>member.example.com</code> (member).</li>
+    <li>Máy dev có PowerShell + OpenSSH client (để chạy script đưa source lên).</li>
+  </ul>
+
+  <h2>Các bước</h2>
+  <ol class="big">
+    <li><b>Đưa source lên server (nhập PAT 1 lần).</b> Repo private → dùng script; PAT đi thẳng máy bạn → git credential store của server, không qua bên thứ ba:
+      <pre><code>powershell -File tools\deploy\fetch-source-to-server.ps1 -Server root@YOUR_SERVER -Username &lt;gh-user&gt;
+# -> /opt/harness-portal (source), /opt/harness-portal/portal (compose)</code></pre></li>
+
+    <li><b>Sinh secrets trên server</b> (không commit, không để lộ). Nếu tooling của bạn chặn lệnh chạm <code>.env</code>, đặt tên file khác và dùng <code>--env-file</code>:
+      <pre><code>cd /opt/harness-portal/portal
+cat &gt; deploy.vars &lt;&lt;EOF
+POSTGRES_USER=harness_portal
+POSTGRES_DB=harness_portal
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+PORTAL_MASTER_KEY=$(openssl rand -hex 32)
+JWT_SECRET=$(openssl rand -hex 32)
+ENVIRONMENT=production
+EMAIL_BACKEND=console
+KEY_PROVIDER=local
+MEMBER_WEB_BASE_URL=https://member.example.com
+ADMIN_VITE_API_BASE_URL=
+MEMBER_VITE_API_BASE_URL=
+EOF
+chmod 600 deploy.vars</code></pre>
+      <span class="warn" style="display:block"><b>Sao lưu <code>PORTAL_MASTER_KEY</code> vào vault.</b> Mất nó = không giải mã được mọi provider key đã lưu.</span></li>
+
+    <li><b>Chọn port trống + file override cô lập.</b> Kiểm port đang dùng (<code>ss -tlnH</code>), chọn 2 port trống (vd 9600/9610). Tạo <code>docker-compose.server.yml</code> — không publish db/backend, web bind localhost:
+      <pre><code>services:
+  postgres: { ports: !reset [] }
+  backend:  { ports: !reset [] }
+  gateway:  { ports: !reset [] }
+  admin-web:  { ports: !override ["127.0.0.1:9600:80"] }
+  member-web: { ports: !override ["127.0.0.1:9610:80"] }</code></pre>
+      <span class="note" style="display:block">Dùng <code>!override</code> để <i>thay</i> port (không phải <code>!reset [list]</code>, cái đó xoá sạch). Render kiểm trước khi chạy: <code>docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml config | grep -E 'published|host_ip'</code> — phải thấy đúng 127.0.0.1:9600/9610, không có gì khác.</span></li>
+
+    <li><b>Build &amp; chạy</b> (project name riêng để cô lập tuyệt đối):
+      <pre><code>docker compose --env-file deploy.vars -p harness-portal \
+  -f docker-compose.yml -f docker-compose.server.yml up -d --build</code></pre>
+      Backend tự chạy <code>alembic upgrade head</code> + healthcheck; web/gateway chờ backend healthy.</li>
+
+    <li><b>Thêm vhost reverse-proxy + TLS</b> (chỉ <b>thêm file mới</b>, không sửa cũ). Tái dùng cert wildcard sẵn có nếu domain đã có (vd Cloudflare Origin cert phủ <code>*.example.com</code>), hoặc <code>certbot</code>:
+      <pre><code># /etc/nginx/sites-enabled/portal.example.com.conf
+server { listen 80; server_name portal.example.com; location / { return 301 https://$host$request_uri; } }
+server {
+  listen 443 ssl http2; server_name portal.example.com;
+  ssl_certificate     /path/to/fullchain.pem;
+  ssl_certificate_key /path/to/privkey.pem;
+  location / { proxy_pass http://127.0.0.1:9600; proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme; }
+}
+# (làm tương tự file member.example.com.conf -> 127.0.0.1:9610)
+nginx -t && nginx -s reload   # test TRƯỚC, reload graceful (không rớt site khác)</code></pre>
+      <span class="note" style="display:block">Web đã build <b>same-origin</b> (nginx trong container tự proxy <code>/api</code> → backend), nên vhost host chỉ cần forward toàn bộ về cổng web — không cần cấu hình CORS.</span></li>
+
+    <li><b>Verify + kiểm không đụng ai:</b>
+      <pre><code>docker compose -p harness-portal ps                       # 4 container up/healthy
+curl -sk --resolve portal.example.com:443:127.0.0.1 https://portal.example.com/   # 200 (cert origin dùng -k)
+curl -s https://portal.example.com/api/auth/oidc/status   # {"enabled":false} (proxy OK)
+docker ps -q | wc -l                                      # tổng = (cũ) + 4, không mất cái nào</code></pre>
+      Kiểm thêm vài site cũ vẫn trả 200.</li>
+  </ol>
+
+  <h3>Gỡ / rollback</h3>
+  <pre><code>docker compose -p harness-portal down            # gỡ container (giữ volume dữ liệu)
+docker compose -p harness-portal down -v         # gỡ cả volume (XOÁ dữ liệu Portal)
+rm /etc/nginx/sites-enabled/portal.example.com.conf /etc/nginx/sites-enabled/member.example.com.conf && nginx -t && nginx -s reload</code></pre>
+
+  <div class="danger"><b>Trung thực / an toàn (C10):</b> cô lập theo compose-project nghĩa là build lỗi cũng không hỏng hệ khác; nhưng <b>luôn</b> render <code>config</code> để chắc port đúng trước khi <code>up</code>, và <code>nginx -t</code> trước khi reload. Không dùng overlay Caddy giành :80/:443 trên server đã có reverse proxy. Secrets sinh trên server, không commit.</div>
+
+  <div class="foot">Harness Portal deploy runbook · © 2026 Dau Sy Manh (<code>manhds@</code>) · Apache-2.0.</div>
+</div>
+</body>
+</html>
