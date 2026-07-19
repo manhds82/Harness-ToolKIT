@@ -99,6 +99,46 @@ $receipt = [ordered]@{
 
 Write-Output "[install] done: $written written, $skipped skipped. Integrity OK ($($bundle.content_hash))."
 
+# --- Portal-sync scaffold: create the two files a newcomer would otherwise
+# have to hand-author, at the right location, ready to edit. NEVER overwrite an
+# existing file (a real ingest key / configured project_id is preserved). These
+# are exactly what push-telemetry.ps1 reads to sync telemetry to the Portal. ---
+$syncDir = Join-Path $TargetDir ".harness"
+if (-not (Test-Path $syncDir)) { New-Item -ItemType Directory -Path $syncDir -Force | Out-Null }
+
+$syncJson = Join-Path $syncDir "portal-sync.json"
+if (-not (Test-Path $syncJson)) {
+    $syncTmpl = @"
+{
+  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. You may delete this _README line.",
+  "portal_url": "https://YOUR-PORTAL-DOMAIN",
+  "project_id": "PASTE-PROJECT-ID-HERE"
+}
+"@
+    [System.IO.File]::WriteAllText($syncJson, $syncTmpl, $Utf8NoBom)
+    Write-Output "[scaffold] created .harness\portal-sync.json  -> EDIT portal_url + project_id"
+} else {
+    Write-Output "[scaffold] .harness\portal-sync.json already exists -> kept"
+}
+
+$syncKey = Join-Path $syncDir "portal-sync.key"
+if (-not (Test-Path $syncKey)) {
+    [System.IO.File]::WriteAllText($syncKey, "", $Utf8NoBom)
+    Write-Output "[scaffold] created empty .harness\portal-sync.key -> PASTE ingest key here (1 line)"
+} else {
+    Write-Output "[scaffold] .harness\portal-sync.key already exists -> kept"
+}
+
+# C5: never commit the ingest key. Ensure the target project's .gitignore
+# ignores it (idempotent — add the line only if missing).
+$giPath = Join-Path $TargetDir ".gitignore"
+$giLine = ".harness/portal-sync.key"
+$giHas = (Test-Path $giPath) -and (Select-String -Path $giPath -SimpleMatch $giLine -Quiet)
+if (-not $giHas) {
+    Add-Content -Path $giPath -Value "`n# Harness Portal ingest key - secret, never commit (C5)`n$giLine" -Encoding utf8
+    Write-Output "[scaffold] added portal-sync.key to .gitignore (C5)"
+}
+
 # --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (-MergeClaude) ---
 if ($MergeClaude) {
     $harnessMd = Join-Path $TargetDir "CLAUDE.harness.md"

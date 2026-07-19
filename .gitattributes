@@ -1,5 +1,0 @@
-* text=auto
-*.ps1 text eol=crlf
-*.sh  text eol=lf
-# The bundle artifact is JSON but treat as text with LF for stable hashing/diffs.
-*.bundle.json text eol=lf

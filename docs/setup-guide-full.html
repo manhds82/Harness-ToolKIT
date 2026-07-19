@@ -117,7 +117,7 @@
     <p>Hướng dẫn step-by-step: từ <b>clone git</b> → cài bộ governance vào từng project → deploy Portal → add project → <b>sync token / prompt / security</b> lên Portal. Mỗi bước đều có lệnh copy-chạy được. Ai cũng làm theo được.</p>
     <div class="meta">
       <span class="chip">Windows · PowerShell</span>
-      <span class="chip">Bundle standard-governance v1.2.5</span>
+      <span class="chip">Bundle standard-governance v1.2.6</span>
       <span class="chip">Self-healing transcript sync</span>
       <span class="chip">© 2026 Dau Sy Manh</span>
     </div>
@@ -177,7 +177,7 @@
 cd E:\SourceCode
 git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre></div>
     <p>Sau khi clone, bundle mới nhất nằm ở:</p>
-    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json</pre></div>
+    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json</pre></div>
     <div class="call note"><b>Ghi chú:</b> repo này chỉ cần clone <b>một lần</b>. Nó không phải project của bạn — nó là “kho” chứa bộ cài để rải vào các project khác.</div>
   </section>
 
@@ -185,7 +185,7 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
     <h2><span class="num">2</span> Cài bộ governance vào từng project</h2>
     <p class="lead">Dùng <code>install.ps1</code> — nó verify hash rồi bung <b>92 file</b> (hooks + scripts + policies + schemas) vào thư mục project của bạn, byte-exact.</p>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json `
   -TargetDir  E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span> `
   -Force -MergeClaude</pre></div>
     <h3>Sau khi cài, project của bạn có thêm:</h3>
@@ -208,26 +208,38 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
   </section>
 
   <section id="s3">
-    <h2><span class="num">3</span> Tạo <code>portal-sync.json</code> &amp; <code>portal-sync.key</code></h2>
-    <p class="lead">Hai file này nối project local ↔ project trên Portal. <code>.json</code> = địa chỉ; <code>.key</code> = chìa khoá. <b>Không có script bí ẩn nào khác</b> — chỉ 2 file này.</p>
+    <h2><span class="num">3</span> Điền <code>portal-sync.json</code> &amp; <code>portal-sync.key</code></h2>
+    <p class="lead">Hai file này nối project local ↔ project trên Portal. <code>.json</code> = địa chỉ; <code>.key</code> = chìa khoá. <b>Từ v1.2.6, bạn KHÔNG phải tự tạo</b> — bước 2 (<code>install.ps1</code>) đã tạo sẵn cả 2 file đúng vị trí, chỉ việc mở ra điền.</p>
 
-    <h3>Cách A — Tạo thủ công (1 project)</h3>
-    <p>Chạy trong thư mục project (đổi domain &amp; project_id cho đúng):</p>
-    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># 3a. file cấu hình (không bí mật)</span>
+    <div class="call ok"><b>Sau bước 2, mở project bạn sẽ thấy sẵn:</b>
+      <div class="tree" style="margin-top:8px">
+<span class="d">&lt;YourProject&gt;/.harness/</span>
+├─ <span class="k">portal-sync.json</span>   <span class="c"># đã có template + dòng _README hướng dẫn — SỬA portal_url + project_id</span>
+└─ <span class="k">portal-sync.key</span>    <span class="c"># file RỖNG — DÁN ingest key vào (1 dòng)</span>
+      </div>
+      Installer cũng tự thêm <code>portal-sync.key</code> vào <code>.gitignore</code> (C5 — key không bao giờ lên git).
+    </div>
+
+    <h3>Chỉ cần làm 2 việc:</h3>
+    <ol>
+      <li>Mở <span class="path">.harness\portal-sync.json</span> → thay <code>portal_url</code> = domain Portal của bạn và <code>project_id</code> = ID lấy từ Portal (bước 5). Xoá dòng <code>_README</code> nếu muốn.</li>
+      <li>Mở <span class="path">.harness\portal-sync.key</span> → <b>dán ingest key</b> (Portal → Project → Settings → Reveal ingest key), lưu lại. Xong.</li>
+    </ol>
+
+    <div class="call note"><b>Thay cho file key:</b> có thể đặt biến môi trường <code>HARNESS_PORTAL_INGEST_KEY</code> — push-telemetry ưu tiên biến này trước file. Tiện cho CI, khỏi để key trên đĩa.</div>
+
+    <h3>Nếu cần tạo thủ công (bundle cũ / dựng lại)</h3>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># chỉ dùng khi 2 file chưa tồn tại</span>
 $proj = "E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span>"
 $cfg  = '{ "portal_url": "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>", "project_id": "<span class="tok">&lt;PROJECT_ID&gt;</span>" }'
 Set-Content -Path "$proj\.harness\portal-sync.json" -Value $cfg -Encoding utf8
-
-<span class="cmt"># 3b. file key rỗng — sẽ dán key vào ở bước 5</span>
-New-Item -ItemType File -Path "$proj\.harness\portal-sync.key" -Force | Out-Null</pre></div>
-    <p>Rồi mở <span class="path">.harness\portal-sync.key</span>, <b>dán ingest key</b> lấy từ Portal (Project → Settings → Reveal ingest key), lưu lại. Xong.</p>
-
-    <div class="call note"><b>Thay cho file key:</b> có thể đặt biến môi trường <code>HARNESS_PORTAL_INGEST_KEY</code> — push-telemetry ưu tiên biến này trước file. Tiện cho CI, khỏi để key trên đĩa.</div>
+New-Item -ItemType File -Path "$proj\.harness\portal-sync.key" -Force | Out-Null
+<span class="cmt"># rồi dán ingest key vào portal-sync.key</span></pre></div>
 
     <h3>Cách B — Làm hàng loạt cho mọi project (khuyến nghị)</h3>
     <p>Nếu bạn có nhiều project, viết 1 script <code>*.local.ps1</code> (đuôi <code>.local.ps1</code> đã được gitignore) liệt kê project → id, cài bundle + ghi <code>portal-sync.json</code> một lượt, rồi dán key vào từng file <code>.key</code>. Mẫu:</p>
     <div class="code"><button class="copy">Copy</button><pre>$Portal = "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>"
-$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json"
+$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json"
 $Install= "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
 
 $map = @(
@@ -364,16 +376,10 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
       <li><b>Trên Portal (Admin):</b> Projects → New project → copy <b>Project ID</b> + <b>ingest key</b> (Settings → Reveal).</li>
       <li><b>Cài bundle</b> vào thư mục project:
         <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.5.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json `
   -TargetDir E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span> -Force -MergeClaude</pre></div>
       </li>
-      <li><b>Tạo 2 file sync:</b>
-        <div class="code"><button class="copy">Copy</button><pre>$proj = "E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span>"
-Set-Content "$proj\.harness\portal-sync.json" `
-  '{ "portal_url": "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>", "project_id": "<span class="tok">&lt;NEW_PROJECT_ID&gt;</span>" }' -Encoding utf8
-New-Item -ItemType File "$proj\.harness\portal-sync.key" -Force | Out-Null
-<span class="cmt"># rồi mở portal-sync.key, DÁN ingest key, lưu</span></pre></div>
-      </li>
+      <li><b>Điền 2 file sync</b> (install ở bước trên đã tạo sẵn trong <code>.harness\</code>): mở <span class="path">portal-sync.json</span> điền <code>portal_url</code> + <code>project_id</code>; mở <span class="path">portal-sync.key</span> dán ingest key.</li>
       <li><b>Push lần đầu</b> (hoặc chờ scheduled task tự chạy):
         <div class="code"><button class="copy">Copy</button><pre>powershell -File "$proj\.harness\scripts\powershell\push-telemetry.ps1"</pre></div>
       </li>
@@ -398,7 +404,7 @@ New-Item -ItemType File "$proj\.harness\portal-sync.key" -Force | Out-Null
 </div>
 
 <footer>
-  AI Software Development Harness · standard-governance v1.2.5 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  AI Software Development Harness · standard-governance v1.2.6 · Hooks &gt; rules · Execution ≠ control · No false safety.
   <br/>© 2026 Dau Sy Manh (manhds@). Tài liệu nội bộ — thay các placeholder bằng giá trị thật của bạn trước khi dùng.
 </footer>
 

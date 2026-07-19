@@ -70,6 +70,40 @@ with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as
 print("[install] done: %d written, %d skipped. Integrity OK (%s)." % (written, skipped, b["content_hash"]))
 PY
 
+# --- Portal-sync scaffold: create the two files a newcomer would otherwise have
+# to hand-author, at the right location, ready to edit. NEVER overwrite existing
+# ones (a real key / configured project_id is preserved). push-telemetry.sh reads
+# exactly these two files to sync telemetry to the Portal. ---
+mkdir -p "$TARGET/.harness"
+SYNC_JSON="$TARGET/.harness/portal-sync.json"
+if [[ ! -f "$SYNC_JSON" ]]; then
+  cat > "$SYNC_JSON" <<'JSON'
+{
+  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. You may delete this _README line.",
+  "portal_url": "https://YOUR-PORTAL-DOMAIN",
+  "project_id": "PASTE-PROJECT-ID-HERE"
+}
+JSON
+  echo "[scaffold] created .harness/portal-sync.json  -> EDIT portal_url + project_id"
+else
+  echo "[scaffold] .harness/portal-sync.json already exists -> kept"
+fi
+SYNC_KEY="$TARGET/.harness/portal-sync.key"
+if [[ ! -f "$SYNC_KEY" ]]; then
+  : > "$SYNC_KEY"
+  echo "[scaffold] created empty .harness/portal-sync.key -> PASTE ingest key here (1 line)"
+else
+  echo "[scaffold] .harness/portal-sync.key already exists -> kept"
+fi
+
+# C5: never commit the ingest key. Ensure the target project's .gitignore
+# ignores it (idempotent — add the line only if missing).
+GI="$TARGET/.gitignore"
+if ! grep -qF ".harness/portal-sync.key" "$GI" 2>/dev/null; then
+  printf '\n# Harness Portal ingest key — secret, never commit (C5)\n.harness/portal-sync.key\n' >> "$GI"
+  echo "[scaffold] added portal-sync.key to .gitignore (C5)"
+fi
+
 # --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (--merge-claude) ---
 if [[ "$MERGE_CLAUDE" -eq 1 ]]; then
   HARNESS_MD="$TARGET/CLAUDE.harness.md"
