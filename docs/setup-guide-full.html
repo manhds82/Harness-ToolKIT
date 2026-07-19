@@ -117,7 +117,7 @@
     <p>Hướng dẫn step-by-step: từ <b>clone git</b> → cài bộ governance vào từng project → deploy Portal → add project → <b>sync token / prompt / security</b> lên Portal. Mỗi bước đều có lệnh copy-chạy được. Ai cũng làm theo được.</p>
     <div class="meta">
       <span class="chip">Windows · PowerShell</span>
-      <span class="chip">Bundle standard-governance v1.2.6</span>
+      <span class="chip">Bundle standard-governance v1.2.7</span>
       <span class="chip">Self-healing transcript sync</span>
       <span class="chip">© 2026 Dau Sy Manh</span>
     </div>
@@ -177,7 +177,7 @@
 cd E:\SourceCode
 git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre></div>
     <p>Sau khi clone, bundle mới nhất nằm ở:</p>
-    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json</pre></div>
+    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json</pre></div>
     <div class="call note"><b>Ghi chú:</b> repo này chỉ cần clone <b>một lần</b>. Nó không phải project của bạn — nó là “kho” chứa bộ cài để rải vào các project khác.</div>
   </section>
 
@@ -185,7 +185,7 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
     <h2><span class="num">2</span> Cài bộ governance vào từng project</h2>
     <p class="lead">Dùng <code>install.ps1</code> — nó verify hash rồi bung <b>92 file</b> (hooks + scripts + policies + schemas) vào thư mục project của bạn, byte-exact.</p>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json `
   -TargetDir  E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span> `
   -Force -MergeClaude</pre></div>
     <h3>Sau khi cài, project của bạn có thêm:</h3>
@@ -193,7 +193,7 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
 <span class="d">&lt;YourProject&gt;/</span>
 ├─ <span class="d">.claude/</span>          <span class="c"># hooks (SessionStart/PreToolUse/…), agents, skills, settings.json</span>
 ├─ <span class="d">.harness/</span>
-│   ├─ <span class="d">control/</span>      <span class="c"># risk-policy.yaml (24 deny patterns), tool-registry, power-policy…</span>
+│   ├─ <span class="d">control/</span>      <span class="c"># risk-policy.yaml (30 deny patterns), tool-registry, power-policy…</span>
 │   ├─ <span class="d">scripts/</span>      <span class="c"># push-telemetry.ps1, guard, sampler, ledger…</span>
 │   ├─ <span class="d">schemas/</span>      <span class="c"># JSON Schema cho mọi config (C8)</span>
 │   └─ <span class="d">memory/</span>       <span class="c"># constitution.md</span>
@@ -209,7 +209,7 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
 
   <section id="s3">
     <h2><span class="num">3</span> Điền <code>portal-sync.json</code> &amp; <code>portal-sync.key</code></h2>
-    <p class="lead">Hai file này nối project local ↔ project trên Portal. <code>.json</code> = địa chỉ; <code>.key</code> = chìa khoá. <b>Từ v1.2.6, bạn KHÔNG phải tự tạo</b> — bước 2 (<code>install.ps1</code>) đã tạo sẵn cả 2 file đúng vị trí, chỉ việc mở ra điền.</p>
+    <p class="lead">Hai file này nối project local ↔ project trên Portal. <code>.json</code> = địa chỉ; <code>.key</code> = chìa khoá. <b>Từ v1.2.7, bạn KHÔNG phải tự tạo</b> — bước 2 (<code>install.ps1</code>) đã tạo sẵn cả 2 file đúng vị trí, chỉ việc mở ra điền.</p>
 
     <div class="call ok"><b>Sau bước 2, mở project bạn sẽ thấy sẵn:</b>
       <div class="tree" style="margin-top:8px">
@@ -239,7 +239,7 @@ New-Item -ItemType File -Path "$proj\.harness\portal-sync.key" -Force | Out-Null
     <h3>Cách B — Làm hàng loạt cho mọi project (khuyến nghị)</h3>
     <p>Nếu bạn có nhiều project, viết 1 script <code>*.local.ps1</code> (đuôi <code>.local.ps1</code> đã được gitignore) liệt kê project → id, cài bundle + ghi <code>portal-sync.json</code> một lượt, rồi dán key vào từng file <code>.key</code>. Mẫu:</p>
     <div class="code"><button class="copy">Copy</button><pre>$Portal = "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>"
-$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json"
+$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json"
 $Install= "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
 
 $map = @(
@@ -376,7 +376,7 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
       <li><b>Trên Portal (Admin):</b> Projects → New project → copy <b>Project ID</b> + <b>ingest key</b> (Settings → Reveal).</li>
       <li><b>Cài bundle</b> vào thư mục project:
         <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.6.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json `
   -TargetDir E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span> -Force -MergeClaude</pre></div>
       </li>
       <li><b>Điền 2 file sync</b> (install ở bước trên đã tạo sẵn trong <code>.harness\</code>): mở <span class="path">portal-sync.json</span> điền <code>portal_url</code> + <code>project_id</code>; mở <span class="path">portal-sync.key</span> dán ingest key.</li>
@@ -404,7 +404,7 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
 </div>
 
 <footer>
-  AI Software Development Harness · standard-governance v1.2.6 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  AI Software Development Harness · standard-governance v1.2.7 · Hooks &gt; rules · Execution ≠ control · No false safety.
   <br/>© 2026 Dau Sy Manh (manhds@). Tài liệu nội bộ — thay các placeholder bằng giá trị thật của bạn trước khi dùng.
 </footer>
 
