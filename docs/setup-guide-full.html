@@ -139,6 +139,7 @@
     <a class="step" href="#s8">8 · Verify &amp; tự động hoá</a>
     <a class="step" href="#s9">9 · Harness Level (tự đo)</a>
     <a class="step" href="#upgrade">10 · Nâng cấp bundle</a>
+    <a class="step" href="#approvals">11 · Approvals (duyệt lệnh)</a>
     <a href="#newproj">➕ Thêm project mới</a>
     <a href="#tshoot">Xử lý sự cố</a>
   </nav>
@@ -406,6 +407,28 @@ Get-ChildItem E:\SourceCode -Directory |
     &amp; $Install -BundleFile $Bundle.FullName -TargetDir $_.FullName -Force -MergeClaude
   }</pre></div>
     <div class="call ok"><b>Idempotent:</b> <code>-Force</code> chỉ ghi đè file bundle (hooks/scripts/policies), giữ nguyên <code>portal-sync.json</code>/<code>.key</code>. Chạy lại bao nhiêu lần cũng được. Xong thì mở lại Claude ở project → hook mới chạy, telemetry mới sync, điểm tự cập nhật.</div>
+  </section>
+
+  <section id="approvals">
+    <h2><span class="num">11</span> Approvals — duyệt hành động rủi ro cao (H5)</h2>
+    <p class="lead">Khi project bật <code>"pdp_enforce": true</code>, các hành động rủi ro cao (deploy / ghi DB / đổi khoá / egress lạ) bị PDP giữ lại → hiện ở tab <b>Approvals</b> chờ bạn quyết định. Agent bị chặn tới khi có quyết định.</p>
+    <div class="tblwrap"><table>
+      <tr><th>Cột</th><th>Ý nghĩa</th></tr>
+      <tr><td><b>#</b></td><td>Số thứ tự dòng (theo sắp xếp hiện tại)</td></tr>
+      <tr><td><b>Dự án</b></td><td>Project phát sinh yêu cầu</td></tr>
+      <tr><td><b>Hành động &amp; ảnh hưởng</b></td><td>Tên hành động + mô tả <b>ảnh hưởng bằng tiếng Việt</b> (vd deploy = "đưa code lên môi trường đang chạy")</td></tr>
+      <tr><td><b>Lệnh cụ thể</b></td><td>Lệnh/nội dung thật sự sẽ chạy (rê chuột xem đầy đủ)</td></tr>
+      <tr><td><b>Người yêu cầu</b></td><td>Agent/session nào yêu cầu</td></tr>
+      <tr><td><b>Trạng thái</b></td><td>Chờ duyệt / Đã duyệt / Đã từ chối</td></tr>
+    </table></div>
+    <ul>
+      <li><b>Sắp xếp</b>: bấm tiêu đề cột (Dự án / Hành động / Trạng thái / Thời gian) để sort ▲▼.</li>
+      <li><b>Lọc</b>: ô search (dự án/tool/lệnh) + dropdown trạng thái.</li>
+      <li><b>Approve</b> = cho phép (agent nhận <code>allow</code> ở lần thử lại). <b>Reject</b> = chặn vĩnh viễn hành động đó.</li>
+      <li>Mọi quyết định ghi kèm <b>tên người duyệt</b> (audit, C9).</li>
+    </ul>
+    <div class="call note"><b>Bật/tắt enforcement:</b> sửa <code>.harness\portal-sync.json</code> field <code>pdp_enforce</code>, hoặc chạy
+      <code>set-pdp-enforce.ps1</code> (bật tất cả) / <code>-Enforce:$false</code> (tắt). Mặc định TẮT — không cản trở khi chưa cần.</div>
   </section>
 
   <section id="newproj">

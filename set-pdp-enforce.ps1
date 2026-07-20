@@ -25,6 +25,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Console output ASCII-only + best-effort UTF-8 so it never mojibakes on a
+# non-UTF console codepage (e.g. cp932). Keep all Write-Host messages ASCII.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $skip = @("HarnessAI-ToolKIT", "Harness-ToolKIT")
 
@@ -43,7 +46,7 @@ foreach ($p in $projects) {
     try {
         $cfg = Get-Content $f -Raw -Encoding utf8 | ConvertFrom-Json
     } catch {
-        Write-Warning ("  ! {0,-26} portal-sync.json không đọc được — BỎ QUA (giữ nguyên)" -f $p.Name)
+        Write-Warning ("  ! {0,-26} portal-sync.json unreadable -- SKIPPED (left as-is)" -f $p.Name)
         $summary += [pscustomobject]@{ Project = $p.Name; Old = "parse-error"; New = "(skipped)" }
         continue
     }
@@ -58,13 +61,13 @@ foreach ($p in $projects) {
     # Set only this one property; every other key is preserved verbatim.
     $cfg | Add-Member -NotePropertyName pdp_enforce -NotePropertyValue $Enforce -Force
     [System.IO.File]::WriteAllText($f, ($cfg | ConvertTo-Json -Depth 8), $Utf8NoBom)
-    Write-Host ("  > {0,-26} pdp_enforce {1} -> {2}  (portal_url/project_id giữ nguyên)" -f $p.Name, $old, $Enforce) -ForegroundColor Cyan
+    Write-Host ("  > {0,-26} pdp_enforce {1} -> {2}  (portal_url/project_id preserved)" -f $p.Name, $old, $Enforce) -ForegroundColor Cyan
     $summary += [pscustomobject]@{ Project = $p.Name; Old = $old; New = "$Enforce" }
 }
 
 Write-Host "`n==================== SUMMARY ($($summary.Count)) ====================" -ForegroundColor Green
 $summary | Format-Table -AutoSize
 if (-not $WhatIf -and $Enforce) {
-    Write-Host "Đã bật PDP. Lưu ý: chỉ có tác dụng khi portal_url/project_id/key đã điền đúng và Portal chạy được." -ForegroundColor Gray
-    Write-Host "Muốn tắt: chạy lại với -Enforce:`$false" -ForegroundColor Gray
+    Write-Host "PDP enabled. Takes effect only when portal_url/project_id/key are set and the Portal is reachable." -ForegroundColor Gray
+    Write-Host "To turn off: re-run with -Enforce:`$false" -ForegroundColor Gray
 }

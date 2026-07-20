@@ -28,6 +28,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }  # avoid console mojibake
 $ToolkitRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
 if (-not $BundleDir) { $BundleDir = Join-Path $ToolkitRoot "bundles\standard-governance" }
 $Installer = Join-Path $ToolkitRoot "tools\harness-bundle\install.ps1"
