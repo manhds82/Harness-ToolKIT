@@ -23,6 +23,7 @@ param(
     [string]$BaseDir   = "E:\SourceCode",
     [string]$BundleDir = "",
     [switch]$Reinstall,
+    [switch]$PdpEnforce,   # also turn on server-side PDP enforcement in each portal-sync.json
     [switch]$WhatIf
 )
 
@@ -96,3 +97,9 @@ $failed  = ($summary | Where-Object { $_.Status -eq "FAILED" }).Count
 Write-Host ("Done: {0} updated, {1} up-to-date, {2} failed." -f $updated,
     ($summary | Where-Object { $_.Status -eq "up-to-date" }).Count, $failed) -ForegroundColor $(if ($failed) { "Yellow" } else { "Green" })
 Write-Host "portal-sync.key / portal-sync.json were preserved. Run a Claude session per project to refresh telemetry." -ForegroundColor Gray
+
+# Optionally flip on PDP enforcement (safe JSON merge; preserves all other keys).
+if ($PdpEnforce) {
+    Write-Host ""
+    & (Join-Path $PSScriptRoot "set-pdp-enforce.ps1") -BaseDir $BaseDir -Enforce $true -WhatIf:$WhatIf
+}

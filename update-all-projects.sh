@@ -11,11 +11,12 @@
 set -euo pipefail
 
 BASE_DIR="${BASE_DIR:-$HOME/SourceCode}"
-DRY=0; REINSTALL=0
+DRY=0; REINSTALL=0; PDP=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1;;
     --reinstall) REINSTALL=1;;
+    --pdp-enforce) PDP=1;;
   esac
 done
 
@@ -70,3 +71,8 @@ done
 echo
 echo "Done: $updated updated, $uptodate up-to-date, $failed failed."
 echo "portal-sync.key/.json preserved. Run a Claude session per project to refresh telemetry."
+
+if [ $PDP -eq 1 ]; then
+  echo
+  BASE_DIR="$BASE_DIR" bash "$(dirname "$0")/set-pdp-enforce.sh" $([ $DRY -eq 1 ] && echo --dry-run)
+fi
