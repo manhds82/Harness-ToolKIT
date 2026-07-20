@@ -9,8 +9,8 @@
 # materializes them back into a target project.
 schema_version: "1.0.0"
 name: "standard-governance"
-version: "1.4.1"
-description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (self-healing transcript-driven token sampling — case-insensitive, recursive incl. subagents; guard fail-open on bad regex; guard scans shell commands only — no false positives on file writes; 30 hardened deny patterns for RCE/exfil/persistence/container-escape/SSRF/ledger-tamper) + push-telemetry client for Portal sync. CASAN uplift policy pack (casan-policies.yaml + schema) closing H1/H2/H3/H6/H7 gaps: context pointer-store, tool idempotency/rate-limit, evaluation golden-set+regression-gate, agentops anomaly+hallucination thresholds, orchestration model-fallback+rollback. v1.4.0 adds server-side PDP enforcement (opt-in hook consult): H4 outbound allowlist enforced, H5 approval workflow (deploy/DB-write held for admin approve/reject), H6 real cost-anomaly alerts (incident + email) — raising CASAN to ~81, Level 4 Automated. v1.4.1 makes three declarations real, shipped mechanisms: H1 SessionStart hook builds .harness/context/pipeline-context.yaml pointer-store; H6 per-model drift detection + webhook/Slack alert delivery; H7 callable model-fallback resolver + git rollback restore-point (harness-rollback, harness-model-fallback) — CASAN ~82. Installer auto-scaffolds ready-to-edit .harness/portal-sync.json + empty portal-sync.key and gitignores the key (C5). H4 control policies, contract templates, JSON schemas."
+version: "1.4.2"
+description: "Baseline enterprise-governance harness: 9-agent fleet, 6 hooks (self-healing transcript-driven token sampling — case-insensitive, recursive incl. subagents; guard fail-open on bad regex; guard scans shell commands only — no false positives on file writes; 30 hardened deny patterns for RCE/exfil/persistence/container-escape/SSRF/ledger-tamper) + push-telemetry client for Portal sync. CASAN uplift policy pack (casan-policies.yaml + schema) closing H1/H2/H3/H6/H7 gaps: context pointer-store, tool idempotency/rate-limit, evaluation golden-set+regression-gate, agentops anomaly+hallucination thresholds, orchestration model-fallback+rollback. v1.4.0 adds server-side PDP enforcement (opt-in hook consult): H4 outbound allowlist enforced, H5 approval workflow (deploy/DB-write held for admin approve/reject), H6 real cost-anomaly alerts (incident + email) — raising CASAN to ~81, Level 4 Automated. v1.4.1 makes three declarations real, shipped mechanisms: H1 SessionStart hook builds .harness/context/pipeline-context.yaml pointer-store; H6 per-model drift detection + webhook/Slack alert delivery; H7 callable model-fallback resolver + git rollback restore-point (harness-rollback, harness-model-fallback) — CASAN ~82. v1.4.2 upgrades H1 with a local retrieval index (harness_rag.py: BM25 default + pluggable neural via HARNESS_EMBED_CMD, harness-context-query) over docs/spec/contracts so agents retrieve relevant chunks instead of re-scanning — CASAN ~83. Installer auto-scaffolds ready-to-edit .harness/portal-sync.json + empty portal-sync.key and gitignores the key (C5). H4 control policies, contract templates, JSON schemas."
 maintainer: "Dau Sy Manh <manhds@>"
 
 provides:
@@ -34,6 +34,8 @@ provides:
     - ".harness/scripts/powershell/*.ps1"
   scripts-posix:
     - ".harness/scripts/bash/*.sh"
+  scripts-lib:
+    - ".harness/scripts/lib/*.py"
   contracts:
     - "contracts/*.yaml"
   # In-project copy of the installer/uninstaller/PM-lock (both shells) so a
