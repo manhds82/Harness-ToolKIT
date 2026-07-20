@@ -108,13 +108,13 @@
 <body>
 <header class="hero">
   <div class="wrap">
-    <div class="eyebrow">AI Software Development Harness · Toolkit · standard-governance v1.4.3</div>
+    <div class="eyebrow">AI Software Development Harness · Toolkit · standard-governance v1.4.5</div>
     <h1>Bộ rule, tính năng &amp; đánh giá trưởng thành CASAN (H1–H7)</h1>
     <p>Tài liệu giới thiệu những gì bộ KIT đã làm — 10 nguyên tắc (C1–C10), 7 tầng Harness, hooks/guard/ledger — kèm bản <b>tự đánh giá theo khung CASAN</b> và các <b>đề xuất cải tiến rule/tính năng</b> mới.</p>
     <div class="meta">
       <span class="chip">7 Harness H1–H7</span>
       <span class="chip">10 nguyên tắc C1–C10</span>
-      <span class="chip">CASAN Level 4 — Automated</span>
+      <span class="chip">CASAN Level 5* — Native (baseline)</span>
       <span class="chip">© 2026 Dau Sy Manh</span>
     </div>
   </div>
@@ -143,12 +143,12 @@
     <h2>Tóm tắt điều hành</h2>
     <p class="lead">Bộ KIT bọc năng lực coding của agent (Claude Code) trong các tầng identity · policy · evaluation · audit. Đánh giá theo CASAN cho thấy nền tảng vững ở Context/Tool/Security/Governance, còn dư địa ở Evaluation &amp; AgentOps.</p>
     <div class="kpis">
-      <div class="kpi"><div class="v" style="color:var(--strong)">83<span style="font-size:16px;color:var(--muted)">/100</span></div><div class="l">Điểm trung bình (v1.4.3)</div></div>
-      <div class="kpi"><div class="v" style="color:var(--strong)">Level 4</div><div class="l">CASAN — Automated</div></div>
+      <div class="kpi"><div class="v" style="color:var(--strong)">84<span style="font-size:16px;color:var(--muted)">/100</span></div><div class="l">Năng lực (baseline, v1.4.5)</div></div>
+      <div class="kpi"><div class="v" style="color:var(--strong)">Level 5*</div><div class="l">CASAN — Native (năng lực)</div></div>
       <div class="kpi"><div class="v" style="color:var(--good)">0</div><div class="l">Harness ở mức GAP (&lt;30)</div></div>
       <div class="kpi"><div class="v" style="color:var(--good)">H3·80</div><div class="l">Điểm thấp nhất (ceiling)</div></div>
     </div>
-    <div class="call note"><b>Nguyên tắc CASAN:</b> <i>Harness thấp nhất quyết định ceiling.</i> Không có tầng nào ở mức GAP nghĩa là KIT đủ điều kiện vận hành Level 3–4; muốn chạm Level 4 vững cần nâng H6 (AgentOps) và H3 (Evaluation), đồng thời chuyển các chốt bảo mật/phê duyệt từ hook cục bộ (defense-in-depth) sang enforcement tại gateway (C10).</div>
+    <div class="call note"><b>* “Level 5 (năng lực)” nghĩa là gì (trung thực — C10):</b> đây là điểm <b>NĂNG LỰC/baseline</b> — mọi cơ chế H1–H7 đã <i>ship &amp; chạy được</i> (avg 84, mọi tầng &gt;80). <b>Điểm THỰC của từng dự án</b> vẫn tính theo <b>bằng chứng quan sát</b> (thường thấp hơn tới khi dự án có test/budget/provider — xem playbook nâng điểm). Ngoài ra enforcement H3/H4/H5 là <b>opt-in</b> (<code>pdp_enforce</code>) và phần lớn là defense-in-depth qua hook; “biên giới cứng” tuyệt đối vẫn cần route side-effect qua gateway PDP (còn trong backlog).</div>
   </section>
 
   <!-- ===================== CASAN RADAR ===================== -->
@@ -251,8 +251,8 @@
 
   <!-- ===================== ROADMAP ===================== -->
   <section id="roadmap">
-    <h2>Backlog nâng cấp — Level 4 → Level 5 &amp; xa hơn</h2>
-    <p class="lead">Đã đạt <b>Level 4 (avg 83)</b>. Để lên <b>Level 5 (mọi tầng &gt;80)</b> cần đóng các item <b>△</b> còn lại; phần dưới liệt kê đầy đủ △ theo từng tầng <b>và các item MỚI chưa từng liệt kê</b> để lập plan. Trạng thái: ✅ xong · △ còn lại · ➕ mới đề xuất.</p>
+    <h2>Backlog nâng cấp — củng cố Level 5 &amp; xa hơn</h2>
+    <p class="lead"><b>Baseline (năng lực) đã đạt Level 5</b> (avg 84, mọi tầng &gt;80). Việc còn lại: (a) biến năng lực thành <b>điểm thực</b> ở từng dự án (playbook nâng điểm), (b) đóng các item <b>△</b> còn lại + item <b>➕</b> mới để enforcement thành <b>biên giới cứng</b> (không chỉ opt-in). Trạng thái: ✅ xong · △ còn lại · ➕ mới đề xuất.</p>
     <div class="tblwrap"><table>
       <tr><th>Tầng</th><th>Item còn lại (△) + mới (➕)</th><th>Ưu tiên</th></tr>
       <tr><td class="hid">H1 Context 84</td><td>△ Auto-inject chunk RAG vào prompt (UserPromptSubmit hook) · ➕ embedding neural on-prem (Ollama) qua HARNESS_EMBED_CMD · ➕ context compaction/summary khi vượt window</td><td><span class="pri m">Vừa</span></td></tr>
@@ -279,7 +279,7 @@
 </div>
 
 <footer>
-  AI Software Development Harness · standard-governance v1.4.3 · Đánh giá CASAN 2026-07-19 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  AI Software Development Harness · standard-governance v1.4.5 · Đánh giá CASAN 2026-07-19 · Hooks &gt; rules · Execution ≠ control · No false safety.
   <br/>© 2026 Dau Sy Manh (manhds@). Điểm số là ước lượng tự đánh giá — tinh chỉnh theo hiện trạng thực tế của từng dự án.
 </footer>
 
@@ -288,11 +288,11 @@
   const H = [
     {id:'H1', name:'Context',       score:84, cls:'t-strong',  have:['CLAUDE.md memory','pointer-store BUILT by SessionStart hook','local RETRIEVAL index (BM25 + pluggable neural) over docs/spec/contracts'], gap:['auto-inject retrieved context into prompts']},
     {id:'H2', name:'Tool',          score:82, cls:'t-strong',  have:['tool-registry (C3)','deny-by-default','audit per-call','idempotency + rate-limit policy'], gap:['gateway enforce idempotency']},
-    {id:'H3', name:'Evaluation',    score:80, cls:'t-good',    have:['LLM-as-judge (verify skill)','policy-CI + red-team','release gate ENFORCED by PDP (deploy denied unless suites green + judge OK)'], gap:['auto-run suites before release']},
+    {id:'H3', name:'Evaluation',    score:83, cls:'t-strong',  have:['LLM-as-judge (verify skill)','release gate ENFORCED by PDP','harness-release AUTO-RUNS suites + report freshness before release'], gap:['chạy suite trên CI/server tự động']},
     {id:'H4', name:'Security',      score:85, cls:'t-strong',  have:['prompt-injection scan','secret scan','30 deny-pattern','outbound allowlist ENFORCED (PDP)'], gap:['route tool path via PDP']},
     {id:'H5', name:'Governance',    score:85, cls:'t-strong',  have:['ledger hash-chain (C9)','risk registry','approval workflow LIVE (ask→approve→allow)'], gap:['—']},
     {id:'H6', name:'AgentOps',      score:84, cls:'t-strong',  have:['token/cost per project','anomaly + per-model DRIFT detection','alerts DELIVERED (incident + email + webhook)'], gap:['live streaming dashboard']},
-    {id:'H7', name:'Orchestration', score:81, cls:'t-strong',  have:['fleet 9 agent','pipeline skills','model-fallback resolver + git rollback tools'], gap:['auto-wire fallback into model select']},
+    {id:'H7', name:'Orchestration', score:83, cls:'t-strong',  have:['fleet 9 agent','pipeline skills','proxy AUTO-WIRES model fallback (retry ladder on fail) + git rollback'], gap:['hard-wire fallback ngoài proxy (workflow engine)']},
   ];
   const COL = {'t-gap':'#E4572E','t-partial':'#E0A32E','t-good':'#2FA96A','t-strong':'#12A3AF'};
   const scoreColor = s => s<30?COL['t-gap'] : s<61?COL['t-partial'] : s<81?COL['t-good'] : COL['t-strong'];
