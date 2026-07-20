@@ -1,0 +1,7 @@
+{
+  "_README": "Mẫu .harness/portal-sync.json. Điền portal_url + project_id từ Portal (Project > Settings > Reveal ingest key). Dán ingest key vào portal-sync.key CÙNG thư mục (KHÔNG để trong file này). member_email = account chạy Claude Code, phải TRÙNG display_name của một Provider connection để token gán đúng account. pdp_enforce=true để bật chặn server-side (H4/H5/H3). Có thể xoá dòng _README.",
+  "portal_url": "https://YOUR-PORTAL-DOMAIN",
+  "project_id": "PASTE-PROJECT-ID-HERE",
+  "member_email": "you@example.com",
+  "pdp_enforce": false
+}
