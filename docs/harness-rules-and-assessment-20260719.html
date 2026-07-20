@@ -133,7 +133,7 @@
     <h4>Đề xuất</h4>
     <a href="#improve">Cải tiến hệ thống</a>
     <a href="#newrules">Rule mới đề xuất</a>
-    <a href="#roadmap">Roadmap đóng GAP</a>
+    <a href="#roadmap">Backlog → Level 5</a>
   </nav>
 
   <main>
@@ -251,16 +251,28 @@
 
   <!-- ===================== ROADMAP ===================== -->
   <section id="roadmap">
-    <h2>Roadmap đóng GAP đạt CASAN Level 4</h2>
+    <h2>Backlog nâng cấp — Level 4 → Level 5 &amp; xa hơn</h2>
+    <p class="lead">Đã đạt <b>Level 4 (avg 83)</b>. Để lên <b>Level 5 (mọi tầng &gt;80)</b> cần đóng các item <b>△</b> còn lại; phần dưới liệt kê đầy đủ △ theo từng tầng <b>và các item MỚI chưa từng liệt kê</b> để lập plan. Trạng thái: ✅ xong · △ còn lại · ➕ mới đề xuất.</p>
     <div class="tblwrap"><table>
-      <tr><th>Ưu tiên</th><th>Hành động</th><th>Harness</th><th>Kết quả</th></tr>
-      <tr><td><span class="pri h">Cao</span></td><td>Anomaly/cost alerting + hallucination flag vào Portal</td><td>H6</td><td>66 → 80+</td></tr>
-      <tr><td><span class="pri h">Cao</span></td><td>Golden dataset + regression-gate skill</td><td>H3</td><td>68 → 82</td></tr>
-      <tr><td><span class="pri m">Vừa</span></td><td>Approval workflow + outbound allowlist ở gateway</td><td>H5/H4</td><td>Enforce thật (C10)</td></tr>
-      <tr><td><span class="pri m">Vừa</span></td><td>6 deny-pattern mới ở trên</td><td>H4</td><td>72 → 82</td></tr>
-      <tr><td><span class="pri l">Thấp</span></td><td>Idempotency key + fallback model + rollback</td><td>H2/H7</td><td>Độ bền vận hành</td></tr>
+      <tr><th>Tầng</th><th>Item còn lại (△) + mới (➕)</th><th>Ưu tiên</th></tr>
+      <tr><td class="hid">H1 Context 84</td><td>△ Auto-inject chunk RAG vào prompt (UserPromptSubmit hook) · ➕ embedding neural on-prem (Ollama) qua HARNESS_EMBED_CMD · ➕ context compaction/summary khi vượt window</td><td><span class="pri m">Vừa</span></td></tr>
+      <tr><td class="hid">H2 Tool 82</td><td>△ Enforce idempotency-key ở gateway · ➕ rate-limit enforce thật · ➕ replay-protection cho tool side-effect · ➕ per-tool JSON-schema validate input/output</td><td><span class="pri m">Vừa</span></td></tr>
+      <tr><td class="hid">H3 Eval 80</td><td>△ Auto-run suite trước release (không chỉ chặn khi đã có report) · ➕ golden-dataset versioned per project · ➕ mutation testing / coverage-gate · ➕ đẩy casan-policies lên portal để gate áp cho cả push-project</td><td><span class="pri h">Cao</span></td></tr>
+      <tr><td class="hid">H4 Security 85</td><td>△ Route tool-path qua PDP (bỏ phụ thuộc hook opt-in) · ➕ sandbox/timeout enforce ở gateway · ➕ PII scanner trong log · ➕ tích hợp secret vault (không chỉ env) · ➕ SAST + quét dependency (SBOM)</td><td><span class="pri h">Cao</span></td></tr>
+      <tr><td class="hid">H5 Gov 85</td><td>➕ Approval có role/SLA + hết hạn tự reject · ➕ ký &amp; attest ledger (tamper-proof export) · ➕ báo cáo compliance định kỳ tự sinh · ➕ policy-as-code test (CI cho chính policy)</td><td><span class="pri m">Vừa</span></td></tr>
+      <tr><td class="hid">H6 AgentOps 84</td><td>△ Dashboard streaming realtime · ➕ hallucination detection thật (không chỉ cờ) · ➕ SLO alerting · ➕ cost attribution theo member/task · ➕ anomaly bằng ML thay ngưỡng tĩnh</td><td><span class="pri m">Vừa</span></td></tr>
+      <tr><td class="hid">H7 Orch 81</td><td>△ Auto-wire fallback vào chọn model thực tế · ➕ test transaction rollback tự động · ➕ trực quan hoá DAG + metric parallel · ➕ agent-to-agent protocol chuẩn hoá</td><td><span class="pri h">Cao</span></td></tr>
     </table></div>
-    <div class="call note"><b>Trên Portal:</b> tab <b>Harness Level</b> mới cho xem điểm H1–H7 <b>tổng thể toàn tổ chức</b> và <b>từng dự án</b> (radar + scorecard + roadmap), tự tính từ telemetry đang thu, admin chỉnh tay được từng mục.</div>
+
+    <h3>Cross-cutting (ngoài 7 tầng) — chưa liệt kê trước đây</h3>
+    <ul>
+      <li><b>Supply-chain:</b> ký số <code>.bundle.json</code> + sinh SBOM cho bundle (verify chữ ký khi install).</li>
+      <li><b>Hard enforcement:</b> cho <code>codeprovider-mcp</code> gọi <code>/api/pdp/decide</code> trước mọi side-effect → biên giới cứng, không còn phụ thuộc hook cục bộ (C10).</li>
+      <li><b>DR:</b> diễn tập backup/restore Postgres định kỳ (script backup.sh đã có — thêm lịch + verify).</li>
+      <li><b>Data governance:</b> chính sách lưu trữ/ẩn danh PII trong telemetry; xoá theo TTL.</li>
+      <li><b>Nâng điểm observed từng dự án:</b> xem playbook <a href="raise-project-casan-score-20260720.html">raise-project-casan-score</a> (budget/provider/test/docs + prompt).</li>
+    </ul>
+    <div class="call note"><b>File này được cập nhật mỗi lần ra bản mới</b> (điểm H1–H7, version, item ✅/△/➕). Nguồn điểm: <code>portal/backend/app/core/assessment.py</code> (baseline) + telemetry (observed). Xem điểm sống ở tab <b>Harness Level</b> trên Portal.</div>
   </section>
 
   </main>

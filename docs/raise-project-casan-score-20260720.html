@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nâng điểm CASAN từng dự án — việc cần làm &amp; prompt</title>
+<style>
+  :root{
+    --ink:#0B1220; --ink2:#111C2E; --panel:#ffffff; --panel2:#f4f7fb; --panel3:#eef2f8;
+    --text:#16202f; --muted:#59647a; --line:#e2e8f1; --accent:#0E7C86; --accent2:#12A3AF; --cyan:#22C7B6;
+    --code-bg:#0B1220; --code-text:#d7e3ea; --good:#2FA96A; --amber:#E0A32E; --violet:#6d5ef0;
+    --radius:14px; --shadow:0 1px 2px rgba(16,26,44,.05),0 8px 24px rgba(16,26,44,.06);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --panel:#0f1826;--panel2:#0c141f;--panel3:#131f30;--text:#dbe4ef;--muted:#8998ad;--line:#213047;
+    --accent:#22C7B6;--accent2:#3fe0cf;--code-bg:#05090f;--code-text:#cdd9e2;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{--panel:#0f1826;--panel2:#0c141f;--panel3:#131f30;--text:#dbe4ef;--muted:#8998ad;--line:#213047;--accent2:#3fe0cf;--code-bg:#05090f;--code-text:#cdd9e2;}
+  :root[data-theme="light"]{--panel:#fff;--panel2:#f4f7fb;--panel3:#eef2f8;--text:#16202f;--muted:#59647a;--line:#e2e8f1;--accent2:#12A3AF;--code-bg:#0B1220;--code-text:#d7e3ea;}
+  *{box-sizing:border-box} html{scroll-behavior:smooth}
+  body{margin:0;background:var(--panel2);color:var(--text);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  code,pre{font-family:"SFMono-Regular",Consolas,Menlo,monospace}
+  header.hero{background:radial-gradient(1100px 380px at 80% -10%,rgba(34,199,182,.18),transparent),linear-gradient(155deg,var(--ink),var(--ink2));color:#eaf1f4;padding:48px 28px 40px;border-bottom:3px solid var(--cyan)}
+  .wrap{max-width:1120px;margin:0 auto}
+  .eyebrow{letter-spacing:.2em;text-transform:uppercase;font-size:12px;color:var(--cyan);font-weight:700}
+  h1{margin:.35em 0 .2em;font-size:clamp(24px,3.2vw,36px);font-weight:800;text-wrap:balance}
+  .hero p{margin:0;color:#a9bcc7;max-width:74ch}
+  main{max-width:1120px;margin:0 auto;padding:28px 28px 80px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px 28px;margin-bottom:20px;box-shadow:var(--shadow)}
+  h2{margin:0 0 6px;font-size:21px;font-weight:800}
+  h3{margin:1.3em 0 .4em;font-size:16px;font-weight:700}
+  p{margin:.55em 0} ul,ol{margin:.4em 0;padding-left:1.25em} li{margin:.3em 0}
+  .lead{color:var(--muted);font-size:15px;margin:.2em 0 1.1em}
+  .tblwrap{overflow-x:auto;margin:1em 0}
+  table{border-collapse:collapse;width:100%;font-size:13.8px;min-width:640px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--panel3);text-transform:uppercase;font-size:11.5px;letter-spacing:.04em;color:var(--muted);font-weight:700}
+  td code{background:var(--panel3);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .hid{font-weight:800;white-space:nowrap}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .p-portal{background:rgba(18,163,175,.14);color:var(--accent2)} .p-prompt{background:rgba(109,94,240,.14);color:var(--violet)} .p-auto{background:rgba(47,169,106,.14);color:var(--good)}
+  .code{position:relative;background:var(--code-bg);border-radius:10px;margin:.7em 0;border:1px solid rgba(255,255,255,.06)}
+  .code pre{margin:0;padding:14px 44px 14px 16px;overflow-x:auto;color:var(--code-text);font-size:13px;line-height:1.55;white-space:pre-wrap}
+  .code button{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.08);color:#cfe;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:11px;padding:4px 9px;cursor:pointer;font-weight:600}
+  .code button.done{background:var(--cyan);color:#04211c}
+  .call{border-left:4px solid var(--accent2);background:rgba(18,163,175,.08);border-radius:8px;padding:12px 16px;margin:1em 0;font-size:14.5px}
+  .call.warn{border-color:var(--amber);background:rgba(224,163,46,.1)}
+  .chk{list-style:none;padding-left:0} .chk li{padding-left:26px;position:relative} .chk li::before{content:"☐";position:absolute;left:0;color:var(--muted)}
+  footer{max-width:1120px;margin:0 auto;padding:0 28px 60px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">AI Harness · CASAN · Playbook nâng điểm</div>
+  <h1>Nâng điểm CASAN của từng dự án — việc cần làm &amp; prompt</h1>
+  <p>Điểm mỗi dự án = <b>0.55 × baseline (năng lực bundle)</b> + <b>0.45 × observed (bằng chứng thật của dự án)</b>. Baseline đã cao; muốn điểm dự án lên thì phải <b>sinh ra bằng chứng</b>. File này liệt kê chính xác việc cần làm + prompt để giao cho dự án tự làm.</p>
+</div></header>
+<main>
+
+  <section>
+    <h2>Nguyên tắc</h2>
+    <p class="lead">Portal chấm mỗi tầng H theo các "tín hiệu" quan sát được trong telemetry. Thiếu tín hiệu → điểm thấp. Có 3 loại việc:</p>
+    <ul>
+      <li><span class="pill p-portal">PORTAL</span> Admin bấm vài cái trên Portal (nhanh, hiệu lực ngay).</li>
+      <li><span class="pill p-prompt">PROMPT</span> Dán prompt vào Claude Code <b>trong dự án</b> để agent tạo bằng chứng (test, docs…).</li>
+      <li><span class="pill p-auto">TỰ ĐỘNG</span> Chỉ cần dùng harness bình thường (chạy phiên) là có.</li>
+    </ul>
+    <div class="call">Sau khi làm, telemetry tự sync (task 15′ / SessionEnd / <b>Sync now</b>) → mở tab <b>Harness Level</b> điểm tự cập nhật. Không cần "đo" tay.</div>
+  </section>
+
+  <section>
+    <h2>Bảng việc theo từng tầng H1–H7</h2>
+    <div class="tblwrap"><table>
+      <tr><th>Tầng</th><th>Tín hiệu Portal chấm</th><th>Việc cần làm để ăn điểm</th><th>Loại</th></tr>
+      <tr><td class="hid">H1 Context</td><td>Có phiên hoạt động · nhiều phiên · có bản đồ source↔doc</td><td>Bổ sung <code>docs/SRS.md</code> + <code>docs/spec.md</code>; chạy doc-scan (Source/Doc tab); chạy nhiều phiên Claude</td><td><span class="pill p-prompt">PROMPT</span> <span class="pill p-portal">PORTAL</span></td></tr>
+      <tr><td class="hid">H2 Tool</td><td>Có audit log · tool có tên · provider đăng ký</td><td>Dùng tool bình thường (tự có); <b>Kết nối ≥1 provider</b> ở tab Providers</td><td><span class="pill p-auto">TỰ ĐỘNG</span> <span class="pill p-portal">PORTAL</span></td></tr>
+      <tr><td class="hid">H3 Evaluation</td><td>Có prompt-score · có test-report · test đang pass</td><td><b>Viết &amp; chạy test cho luồng chính, để xanh</b>; sinh evidence-bundle (verify skill) → nguồn prompt-score</td><td><span class="pill p-prompt">PROMPT</span></td></tr>
+      <tr><td class="hid">H4 Security</td><td>Scanner hoạt động · có hành động bị chặn · credential quản lý</td><td>Guard tự chạy (tự có); kết nối provider (khoá được mã hoá)</td><td><span class="pill p-auto">TỰ ĐỘNG</span> <span class="pill p-portal">PORTAL</span></td></tr>
+      <tr><td class="hid">H5 Governance</td><td>Ledger hash-chain · có deny · <b>có token budget</b></td><td><b>Tạo Token Budget</b> cho dự án ở tab Budgets (thiếu cái này hay kéo điểm xuống)</td><td><span class="pill p-portal">PORTAL</span></td></tr>
+      <tr><td class="hid">H6 AgentOps</td><td>Đo token/cost · có chi phí · latency/budget</td><td>Chạy phiên (tự có token/cost); tạo budget (đã làm ở H5)</td><td><span class="pill p-auto">TỰ ĐỘNG</span></td></tr>
+      <tr><td class="hid">H7 Orchestration</td><td><b>&gt;1 model</b> · <b>&gt;1 agent</b> · <b>&gt;1 provider</b></td><td>Dùng <b>subagent</b> (review đa góc) trong phiên; kết nối <b>provider thứ 2</b> (Tier-2 không cần key)</td><td><span class="pill p-prompt">PROMPT</span> <span class="pill p-portal">PORTAL</span></td></tr>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>A. Việc trên Portal (admin) — ~5 phút/dự án, hiệu lực ngay</h2>
+    <ul class="chk">
+      <li><b>Budgets</b> → mỗi dự án tạo 1 Token Budget (max tokens/cost + ngưỡng %). ⇒ H5 ↑ ngay (~+8).</li>
+      <li><b>Providers</b> → thêm ≥2 provider connection (Tier-2 như Claude Code/Copilot/Ollama không cần key). ⇒ H2 &amp; H7 ↑.</li>
+      <li><b>Source/Doc</b> tab → chạy scan mapping (nếu backend đọc được source). ⇒ H1 ↑.</li>
+      <li><b>Sync now</b> ở Projects list sau khi làm ⇒ điểm cập nhật ngay.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>B. Prompt giao cho DỰ ÁN tự làm</h2>
+    <p class="lead">Mở Claude Code <b>trong thư mục dự án</b>, dán từng prompt. Agent sẽ tạo ra bằng chứng (docs/test…) mà Portal chấm điểm.</p>
+
+    <h3>① Prompt tổng hợp (dán 1 lần — nâng H1/H3/H7)</h3>
+    <div class="code"><button class="copy">Copy</button><pre>Dự án này dùng AI Harness (bộ standard-governance). Hãy giúp nâng độ trưởng thành CASAN:
+1. Bổ sung tài liệu: tạo/cập nhật docs/SRS.md (yêu cầu) và docs/spec.md (kiến trúc & thiết kế) đủ để người mới hiểu dự án.
+2. Kiểm thử: rà soát test hiện có; viết test cho các luồng chính còn thiếu; chạy toàn bộ và sửa đến khi XANH. Tóm tắt passed/failed theo từng suite.
+3. Dùng nhiều subagent chạy SONG SONG để review code theo 3 góc: đúng đắn (correctness), bảo mật (security), hiệu năng (performance); tổng hợp phát hiện.
+4. Tuyệt đối không đưa secret/API key vào code (dùng biến môi trường).
+Cuối cùng liệt kê những gì đã làm và file nào đã tạo/sửa.</pre></div>
+
+    <h3>② Chỉ nâng H3 (Evaluation) — quan trọng nhất</h3>
+    <div class="code"><button class="copy">Copy</button><pre>Chạy toàn bộ test suite của dự án. Nếu thiếu test cho luồng chính, viết bổ sung.
+Sửa mọi test fail đến khi tất cả XANH. In ra tổng kết dạng: suite | passed | failed | coverage.
+Nếu dự án có pipeline verify/review, tạo evidence bundle cho thay đổi vừa rồi.</pre></div>
+
+    <h3>③ Chỉ nâng H1 (Context)</h3>
+    <div class="code"><button class="copy">Copy</button><pre>Viết tài liệu docs/SRS.md và docs/spec.md cho dự án: mục tiêu, phạm vi, kiến trúc, các module chính, luồng dữ liệu, cách chạy & deploy. Ngắn gọn, chính xác, để agent/người mới hiểu nhanh.
+Sau đó liệt kê map: mỗi module/thư mục code ↔ phần tài liệu tương ứng.</pre></div>
+
+    <h3>④ Chỉ nâng H7 (Orchestration)</h3>
+    <div class="code"><button class="copy">Copy</button><pre>Dùng cơ chế subagent: chia việc review dự án thành các agent song song (bảo mật, hiệu năng, đúng đắn, test-coverage). Mỗi agent báo cáo riêng rồi tổng hợp. Mục tiêu tạo hoạt động đa-agent thực sự.</pre></div>
+
+    <div class="call warn"><b>Lưu ý trung thực:</b> điểm chỉ lên khi bằng chứng là <b>thật</b> (test xanh thật, docs thật). Đừng tạo test rỗng/docs giả — vừa vô nghĩa vừa sai tinh thần governance.</div>
+  </section>
+
+  <section>
+    <h2>C. Quy trình đề xuất (làm 1 lượt cho mọi dự án)</h2>
+    <ol>
+      <li>Portal: tạo <b>Budget</b> + thêm <b>provider thứ 2</b> cho tất cả dự án (mục A).</li>
+      <li>Với mỗi dự án lớn: mở Claude Code, dán <b>Prompt ①</b>, để agent tạo docs + test + review đa-agent.</li>
+      <li>Chạy xong → <b>Sync now</b> (hoặc chờ task 15′).</li>
+      <li>Mở tab <b>Harness Level</b> → chọn dự án → xem điểm đã lên, còn thiếu tín hiệu nào (dấu ○ xám trong scorecard) thì bổ sung tiếp.</li>
+    </ol>
+    <div class="call">Muốn siết chặt hơn: bật <code>pdp_enforce: true</code> (xem guide chính §11) để H4/H5/H3 enforce thật (chặn egress lạ, chờ duyệt deploy, chặn deploy khi test đỏ).</div>
+  </section>
+
+  <section>
+    <h2>Checklist mỗi dự án</h2>
+    <ul class="chk">
+      <li>Đã tạo Token Budget (H5)</li>
+      <li>Đã có ≥2 provider connection (H2/H7)</li>
+      <li>Đã có docs/SRS.md + docs/spec.md (H1)</li>
+      <li>Test suite chạy XANH + có report (H3)</li>
+      <li>Đã chạy phiên có subagent (H7)</li>
+      <li>Đã Sync + kiểm tra tab Harness Level</li>
+    </ul>
+  </section>
+
+</main>
+<footer>
+  AI Harness · Playbook nâng điểm CASAN · 2026-07-20 · © 2026 Dau Sy Manh. Điểm phản ánh bằng chứng thật — không bơm số.
+</footer>
+<script>
+  document.querySelectorAll('.code button').forEach(b=>b.addEventListener('click',()=>{
+    const t=b.parentElement.querySelector('pre').innerText;
+    navigator.clipboard.writeText(t).then(()=>{b.textContent='✓';b.classList.add('done');setTimeout(()=>{b.textContent='Copy';b.classList.remove('done')},1400)});
+  }));
+</script>
+</body>
+</html>
