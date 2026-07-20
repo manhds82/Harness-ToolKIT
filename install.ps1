@@ -113,7 +113,8 @@ if (-not (Test-Path $syncJson)) {
   "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. Set pdp_enforce to true to make the PreToolUse hook consult the Portal PDP (H4 outbound allowlist, H5 approval, H3 release gate) — leave false to keep it off. You may delete this _README line.",
   "portal_url": "https://YOUR-PORTAL-DOMAIN",
   "project_id": "PASTE-PROJECT-ID-HERE",
-  "pdp_enforce": false
+  "pdp_enforce": false,
+  "member_email": ""
 }
 "@
     [System.IO.File]::WriteAllText($syncJson, $syncTmpl, $Utf8NoBom)
