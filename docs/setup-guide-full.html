@@ -137,6 +137,8 @@
     <a class="step" href="#s6">6 · File trên Server &amp; Local</a>
     <a class="step" href="#s7">7 · Lệnh Sync data</a>
     <a class="step" href="#s8">8 · Verify &amp; tự động hoá</a>
+    <a class="step" href="#s9">9 · Harness Level (tự đo)</a>
+    <a class="step" href="#upgrade">10 · Nâng cấp bundle</a>
     <a href="#newproj">➕ Thêm project mới</a>
     <a href="#tshoot">Xử lý sự cố</a>
   </nav>
@@ -367,6 +369,43 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
     <p>Kiểm tra nhanh 1 project vừa push:</p>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\harness-sync.local.ps1
 <span class="cmt"># đọc dòng "OK &lt;project&gt; sessions=.. usage=.. actions=.." trả về từ server</span></pre></div>
+  </section>
+
+  <section id="s9">
+    <h2><span class="num">9</span> Harness Level — portal tự đo, không cần bấm gì</h2>
+    <p class="lead">Điểm CASAN (H1–H7) được <b>tính LIVE mỗi lần mở tab</b> từ telemetry đã ingest. <b>Không có nút “đo”.</b></p>
+    <ul>
+      <li><b>Baseline (năng lực bundle)</b> có sẵn ngay sau khi backend deploy — cài bundle mới là điểm nền đã lên.</li>
+      <li><b>Observed (bằng chứng thật)</b> — audit log, security, prompt/test, budget, provider — tăng dần khi telemetry được sync.</li>
+      <li>Xem: <b>Harness Level</b> (toàn tổ chức + chọn từng dự án) hoặc <b>project → tab Harness Level</b>.</li>
+    </ul>
+    <div class="call ok"><b>Cần làm gì để cập nhật?</b> Chỉ cần telemetry mới chảy lên — mà việc đó <b>tự động</b>: scheduled task 15 phút + SessionEnd hook + <code>push-telemetry</code>. Muốn ngay lập tức: bấm <b>Sync now</b> ở Projects. Alert (anomaly/drift) cũng tự chạy sau mỗi ingest.</div>
+    <div class="call note"><b>Sau khi cài bundle mới:</b> chạy <b>≥1 phiên Claude Code</b> ở mỗi project để SessionStart dựng context-store + sinh telemetry mới → điểm phản ánh ở lần mở tab kế tiếp.</div>
+
+    <h3>Trên Portal có phải làm gì không? — Không bắt buộc.</h3>
+    <div class="tblwrap"><table>
+      <tr><th>Tùy chọn</th><th>Cách bật</th></tr>
+      <tr><td>Cảnh báo qua <b>webhook/Slack</b> (ngoài email)</td><td>Thêm <code>ALERT_WEBHOOK_URL</code> vào <code>deploy.vars</code> → <code>docker compose … up -d backend</code></td></tr>
+      <tr><td>Bật <b>enforcement H4/H5</b> (chặn egress/deploy chờ duyệt)</td><td>Thêm <code>"pdp_enforce": true</code> vào <code>.harness\portal-sync.json</code> của project → hiện ở tab <b>Approvals</b></td></tr>
+      <tr><td>Duyệt hành động rủi ro cao</td><td>Vào tab <b>Approvals</b> → Approve / Reject</td></tr>
+    </table></div>
+  </section>
+
+  <section id="upgrade">
+    <h2><span class="num">10</span> Nâng cấp bundle cho TẤT CẢ project</h2>
+    <p class="lead">Khi có bản bundle mới (vd v1.4.1) — cài đè lên mọi project một lượt. <b>An toàn:</b> không đụng <code>portal-sync.key</code> đã dán.</p>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># cập nhật toolkit rồi cài đè bản mới nhất vào mọi project đã onboard</span>
+cd E:\SourceCode\HarnessAI-ToolKIT; git pull
+$Bundle  = Get-ChildItem "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\*.bundle.json" |
+           Sort-Object Name | Select-Object -Last 1
+$Install = "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
+Get-ChildItem E:\SourceCode -Directory |
+  Where-Object { $_.Name -notin @('HarnessAI-ToolKIT','Harness-ToolKIT') -and (Test-Path "$($_.FullName)\.harness") } |
+  ForEach-Object {
+    Write-Host "==== $($_.Name) ====" -ForegroundColor Cyan
+    &amp; $Install -BundleFile $Bundle.FullName -TargetDir $_.FullName -Force -MergeClaude
+  }</pre></div>
+    <div class="call ok"><b>Idempotent:</b> <code>-Force</code> chỉ ghi đè file bundle (hooks/scripts/policies), giữ nguyên <code>portal-sync.json</code>/<code>.key</code>. Chạy lại bao nhiêu lần cũng được. Xong thì mở lại Claude ở project → hook mới chạy, telemetry mới sync, điểm tự cập nhật.</div>
   </section>
 
   <section id="newproj">
