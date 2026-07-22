@@ -244,12 +244,26 @@ if do_guides:
             open(p, "w", encoding="utf-8", newline="\n").write(block + "\n")
             print("[guides] created %s" % rel); continue
         cur = open(p, encoding="utf-8").read()
-        bi, ei = cur.find(BEGIN), cur.find(END)
+        # rfind for the closing marker: if the governance text (or the project's
+        # own notes) mentions the marker inside the block, a first-match search
+        # would cut the block short and leave orphaned text on every refresh.
+        bi, ei = cur.find(BEGIN), cur.rfind(END)
         if bi >= 0 and ei > bi:
             open(p, "w", encoding="utf-8", newline="\n").write(cur[:bi] + block + cur[ei + len(END):])
             print("[guides] refreshed managed block in %s" % rel)
         elif re.search(r"<!--\s*harness:merged\s*-->", cur):
-            print("[guides] %s has a legacy merged block -- left as is" % rel)
+            # Pre-1.5.0 merge appended the text with only a start sentinel, running
+            # to EOF, so it could never be refreshed. Keep everything BEFORE the
+            # sentinel (the project's own content) and re-emit a managed block.
+            # A one-time .bak keeps the conversion reversible.
+            mm = (re.search(r"(?m)^[ \t]*-{3,}[ \t]*\r?\n<!--\s*harness:merged\s*-->", cur)
+                  or re.search(r"<!--\s*harness:merged\s*-->", cur))
+            bak = p + ".pre-migration.bak"
+            if not os.path.exists(bak):
+                open(bak, "w", encoding="utf-8", newline="").write(cur)
+            pre = cur[:mm.start()].rstrip()
+            open(p, "w", encoding="utf-8", newline="\n").write(pre + "\n\n---\n\n" + block + "\n")
+            print("[guides] migrated legacy block in %s -> managed block (backup: %s.pre-migration.bak)" % (rel, rel))
         else:
             open(p, "w", encoding="utf-8", newline="\n").write(cur.rstrip() + "\n\n---\n\n" + block + "\n")
             print("[guides] appended governance to existing %s (your content untouched)" % rel)

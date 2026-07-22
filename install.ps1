@@ -298,15 +298,29 @@ if ($MergeGuides) {
                 continue
             }
             $existing = [System.IO.File]::ReadAllText($p, $Utf8NoBom)
-            $bi = $existing.IndexOf($begin); $ei = $existing.IndexOf($end)
+            # LastIndexOf for the closing marker: if the governance text (or the
+            # project's own notes) ever mentions the marker inside the block, a
+            # first-match search would cut the block short and leave orphaned text
+            # behind on every refresh.
+            $bi = $existing.IndexOf($begin); $ei = $existing.LastIndexOf($end)
             if ($bi -ge 0 -and $ei -gt $bi) {
                 $pre = $existing.Substring(0, $bi)
                 $post = $existing.Substring($ei + $end.Length)
                 [System.IO.File]::WriteAllText($p, $pre + $block + $post, $Utf8NoBom)
                 Write-Output "[guides] refreshed managed block in $rel"
             } elseif ($existing -match '<!--\s*harness:merged\s*-->') {
-                # Pre-1.5.0 merge had no end marker; appending again would duplicate.
-                Write-Output "[guides] $rel has a legacy merged block -- left as is (wrap it in BEGIN/END to get updates)"
+                # Pre-1.5.0 merge appended the governance text with only a start
+                # sentinel and ran to EOF, so it could never be refreshed. Convert
+                # it: keep everything BEFORE the sentinel (that is the project's
+                # own content) and re-emit the governance as a managed block.
+                # A one-time .bak makes the conversion reversible.
+                $mm = [regex]::Match($existing, '(?m)^\s*-{3,}\s*\r?\n<!--\s*harness:merged\s*-->')
+                if (-not $mm.Success) { $mm = [regex]::Match($existing, '<!--\s*harness:merged\s*-->') }
+                $bak = "$p.pre-migration.bak"
+                if (-not (Test-Path $bak)) { [System.IO.File]::WriteAllText($bak, $existing, $Utf8NoBom) }
+                $pre = $existing.Substring(0, $mm.Index).TrimEnd()
+                [System.IO.File]::WriteAllText($p, $pre + "`n`n---`n`n" + $block + "`n", $Utf8NoBom)
+                Write-Output "[guides] migrated legacy block in $rel -> managed block (backup: $rel.pre-migration.bak)"
             } else {
                 [System.IO.File]::WriteAllText($p, $existing.TrimEnd() + "`n`n---`n`n" + $block + "`n", $Utf8NoBom)
                 Write-Output "[guides] appended governance to existing $rel (your content untouched)"

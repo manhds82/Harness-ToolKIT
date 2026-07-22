@@ -1,10 +1,23 @@
 # Harness AI Toolkit — Governance Bundle
 
-A one-command, hash-verified **governance layer for Claude Code projects**.
-Install it into any repo and your Claude Code sessions gain enforceable
-guardrails (dangerous-command blocking, prompt-injection scanning, an
-append-only audit ledger), a 9-agent role fleet, and a structured
-analyze → implement → verify → evidence pipeline.
+A one-command, hash-verified **governance layer for AI-assisted repos**.
+
+It does two distinct things, and it is worth being precise about which is which:
+
+- **One shared rulebook for every assistant.** The same governance text
+  (Guiding Principles, Conventions C1–C10, model ladder) is written into
+  `CLAUDE.md`, `AGENTS.md` (the cross-tool convention read by Codex, Cursor,
+  Jules…) and `.github/copilot-instructions.md` — and any other tool file you
+  enable in one line of config. Every assistant in the repo reads the same rules.
+- **Real enforcement for Claude Code.** There, the rules are backed by hooks and
+  permission deny lists: dangerous-command blocking, prompt-injection scanning,
+  an append-only audit ledger, a 9-agent role fleet, and a structured
+  analyze → implement → verify → evidence pipeline.
+
+For assistants without a hook mechanism (Copilot, Codex, chat UIs) the rulebook
+is **guidance a model can ignore** — enforcement for them has to come from
+outside: a server-side gateway, CI that fails the build, branch protection.
+This README says so wherever it matters rather than implying more.
 
 > **Author / Maintainer:** Dau Sy Manh — `manhds@`
 > **License:** Apache-2.0 (see [`LICENSE`](LICENSE) / [`NOTICE`](NOTICE))
@@ -17,7 +30,7 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.5.2.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.5.3.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
@@ -29,7 +42,11 @@ analyze → implement → verify → evidence pipeline.
 
 ## Requirements
 
-- **Claude Code** (the CLI/agent that reads `.claude/` and runs hooks).
+- **Any AI coding assistant** for the shared rulebook (`CLAUDE.md`, `AGENTS.md`,
+  `.github/copilot-instructions.md`, …) — no runtime needed, they are just files.
+- **Claude Code** for the *enforced* half (the agent that reads `.claude/` and
+  actually runs the hooks). Without it you still get the rulebook, the contracts
+  and the CI suites, but not in-session blocking.
 - **Tooling** (install/uninstall/lock):
   - **Windows:** the `.ps1` scripts (PowerShell 5.1 built-in — no install needed).
   - **macOS/Linux:** the `.sh` scripts (bash + **python3**, both standard on
@@ -46,7 +63,7 @@ analyze → implement → verify → evidence pipeline.
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.2.bundle.json `
+    -BundleFile standard-governance-1.5.3.bundle.json `
     -TargetDir C:\path\to\your-project
 ```
 
@@ -55,7 +72,7 @@ powershell -File install.ps1 `
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 bash install.sh \
-    --bundle standard-governance-1.5.2.bundle.json \
+    --bundle standard-governance-1.5.3.bundle.json \
     --target /path/to/your-project
 ```
 
@@ -73,7 +90,7 @@ project in one step:
 ```powershell
 # Windows: install + governance guides + project identity
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.2.bundle.json `
+    -BundleFile standard-governance-1.5.3.bundle.json `
     -TargetDir C:\path\to\your-project `
     -MergeGuides -ProjectName "your-project"
 ```
@@ -81,7 +98,7 @@ powershell -File install.ps1 `
 ```bash
 # macOS / Linux
 bash install.sh \
-    --bundle standard-governance-1.5.2.bundle.json \
+    --bundle standard-governance-1.5.3.bundle.json \
     --target /path/to/your-project \
     --merge-guides --project-name "your-project"
 ```

@@ -10,16 +10,37 @@
   and copy from — not your project's live memory file.
 -->
 
-# Governance Reference (merge into your project's `CLAUDE.md`)
+# Governance Reference — the rules every assistant in this repo follows
 
 > **Attribution:** Governance harness authored by **Dau Sy Manh**
 > (`manhds@`). When a review/audit skill inspects a project, this header
 > and the bundle `maintainer` field identify the source.
 
-**How to use this file:** open your project's own `CLAUDE.md` side by side with
-this one and copy in the sections below that fit your project. Keep this file as
-a read-only reference (or delete it once merged). Do **not** copy any
-project-specific content — the sections here are written to be generic.
+**These rules are assistant-agnostic.** Nothing below is specific to one vendor —
+only the *file name* an assistant reads is. The installer projects this text into
+each guide file your tools use, wrapped in a pair of HTML-comment markers named
+`BEGIN harness-governance` / `END harness-governance`:
+
+| File | Read by |
+|------|---------|
+| `CLAUDE.md` | Claude Code |
+| `AGENTS.md` | the cross-tool convention — OpenAI Codex, Cursor, Jules, … |
+| `.github/copilot-instructions.md` | GitHub Copilot |
+
+The list lives in `.harness/control/casan-policies.yaml` →
+`governance.guide_targets`, with commented entries for Cursor rules, Windsurf,
+Cline, Continue, Aider and Firebase Studio — enabling one is uncommenting a line.
+Write your own project rules **outside** the managed block; updates only replace
+what is inside it. Run the installer with `-MergeGuides` / `--merge-guides`.
+
+> **What this actually buys you.** Only Claude Code *enforces* these rules, via
+> `.claude/settings.json` hooks and permission deny lists that can block a tool
+> call. Every other assistant has no hook mechanism — for them this text is
+> guidance a model may ignore. If you need those assistants genuinely
+> constrained, the control has to sit outside the assistant: a server-side
+> gateway/PDP, CI that fails the build (`policy-ci`), and branch protection with
+> `CODEOWNERS` over `.harness/** .claude/** contracts/**`. Treat this file as a
+> shared contract, not as a boundary.
 
 ---
 
