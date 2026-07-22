@@ -179,7 +179,9 @@ if pname:
                 if re.match(r"^\S", ln): break
                 m = re.match(r"^\s+name:\s*(.*)$", ln)
                 if m: cur = m.group(1).strip().strip('"')
-        placeholder = cur in ("", "harness-toolkit", "my-project")
+        # A name starting with "-" is never legitimate (it can only come from an
+        # argument-binding slip), so treat it as unclaimed and let a re-run fix it.
+        placeholder = cur in ("", "harness-toolkit", "my-project") or cur.startswith("-")
         if not force_id and not placeholder:
             print("[identity] kept existing project name '%s' (use --force-identity to overwrite)" % cur)
         else:

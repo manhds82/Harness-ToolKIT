@@ -99,10 +99,14 @@ foreach ($p in $projects) {
         # it when contracts/project.yaml still carries the shipped placeholder,
         # so a project that already named itself is never renamed (unless
         # -ForceIdentity). -NoIdentity opts out entirely.
-        $idArgs = @()
+        # Splat a HASHTABLE, not an array: `@array` splats positionally, which
+        # binds the literal string "-ProjectName" as the value of the first free
+        # positional parameter. A hashtable maps keys to parameter NAMES.
+        $idArgs = @{}
         if (-not $NoIdentity) {
-            $idArgs += @("-ProjectName", $p.Name, "-ProjectDescription", $p.Name)
-            if ($ForceIdentity) { $idArgs += "-ForceIdentity" }
+            $idArgs['ProjectName'] = $p.Name
+            $idArgs['ProjectDescription'] = $p.Name
+            if ($ForceIdentity) { $idArgs['ForceIdentity'] = $true }
         }
         & $Installer -BundleFile $latest.File -TargetDir $root -Force -MergeGuides @idArgs | Out-Null
         # Rebuild H1 retrieval index so context-query works immediately (best-effort).

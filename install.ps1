@@ -218,8 +218,11 @@ function Set-ProjectIdentity {
         }
     }
     # The shipped contract carries the toolkit's own identity; treat that (and an
-    # empty name) as "not yet claimed by this project".
-    $isPlaceholder = ($curName -eq "" -or $curName -eq "harness-toolkit" -or $curName -eq "my-project")
+    # empty name) as "not yet claimed by this project". A name starting with "-"
+    # is never legitimate -- it can only come from an argument-binding slip -- so
+    # treat it as unclaimed too and let a re-run repair it.
+    $isPlaceholder = ($curName -eq "" -or $curName -eq "harness-toolkit" -or
+                      $curName -eq "my-project" -or $curName.StartsWith("-"))
     if (-not $Force -and -not $isPlaceholder) { return "kept:$curName" }
 
     $inProject = $false

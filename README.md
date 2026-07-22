@@ -17,7 +17,7 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.5.1.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.5.2.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
@@ -46,7 +46,7 @@ analyze → implement → verify → evidence pipeline.
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.1.bundle.json `
+    -BundleFile standard-governance-1.5.2.bundle.json `
     -TargetDir C:\path\to\your-project
 ```
 
@@ -55,7 +55,7 @@ powershell -File install.ps1 `
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 bash install.sh \
-    --bundle standard-governance-1.5.1.bundle.json \
+    --bundle standard-governance-1.5.2.bundle.json \
     --target /path/to/your-project
 ```
 
@@ -73,7 +73,7 @@ project in one step:
 ```powershell
 # Windows: install + governance guides + project identity
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.1.bundle.json `
+    -BundleFile standard-governance-1.5.2.bundle.json `
     -TargetDir C:\path\to\your-project `
     -MergeGuides -ProjectName "your-project"
 ```
@@ -81,7 +81,7 @@ powershell -File install.ps1 `
 ```bash
 # macOS / Linux
 bash install.sh \
-    --bundle standard-governance-1.5.1.bundle.json \
+    --bundle standard-governance-1.5.2.bundle.json \
     --target /path/to/your-project \
     --merge-guides --project-name "your-project"
 ```
