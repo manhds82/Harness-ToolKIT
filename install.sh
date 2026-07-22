@@ -79,7 +79,7 @@ SYNC_JSON="$TARGET/.harness/portal-sync.json"
 if [[ ! -f "$SYNC_JSON" ]]; then
   cat > "$SYNC_JSON" <<'JSON'
 {
-  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. Set pdp_enforce to true to make the PreToolUse hook consult the Portal PDP (H4 outbound allowlist, H5 approval, H3 release gate) — leave false to keep it off. You may delete this _README line.",
+  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. Set pdp_enforce to true to make the PreToolUse hook consult the Portal PDP (H4 outbound allowlist, H5 approval, H3 release gate) -- leave false to keep it off. You may delete this _README line.",
   "portal_url": "https://YOUR-PORTAL-DOMAIN",
   "project_id": "PASTE-PROJECT-ID-HERE",
   "pdp_enforce": false,
@@ -98,12 +98,37 @@ else
   echo "[scaffold] .harness/portal-sync.key already exists -> kept"
 fi
 
+# --- Buglist scaffold (M6): living buglist.md at project root from the shipped
+# template; never overwrite an existing one. ---
+BUG_FILE="$TARGET/buglist.md"
+BUG_TMPL="$TARGET/.harness/templates/buglist.md"
+if [[ ! -f "$BUG_FILE" && -f "$BUG_TMPL" ]]; then
+  sed "s/<PROJECT>/$(basename "$TARGET")/g" "$BUG_TMPL" > "$BUG_FILE"
+  echo "[scaffold] created buglist.md (log every bug here -- see rule in the file)"
+elif [[ -f "$BUG_FILE" ]]; then
+  echo "[scaffold] buglist.md already exists -> kept"
+fi
+
 # C5: never commit the ingest key. Ensure the target project's .gitignore
-# ignores it (idempotent — add the line only if missing).
+# ignores it (idempotent -- add the line only if missing).
 GI="$TARGET/.gitignore"
 if ! grep -qF ".harness/portal-sync.key" "$GI" 2>/dev/null; then
-  printf '\n# Harness Portal ingest key — secret, never commit (C5)\n.harness/portal-sync.key\n' >> "$GI"
+  printf '\n# Harness Portal ingest key -- secret, never commit (C5)\n.harness/portal-sync.key\n' >> "$GI"
   echo "[scaffold] added portal-sync.key to .gitignore (C5)"
+fi
+
+# --- H1 scaffold: build the context pointer store so a freshly-onboarded project
+# satisfies its own context contract right away (the policy-ci suite asserts it,
+# and the release gate would otherwise block until the first session ran the
+# hook). Best-effort: a failure here must never fail the install.
+CTX_BUILD="$TARGET/.harness/scripts/bash/harness-context-build.sh"
+CTX_STORE="$TARGET/.harness/context/pipeline-context.yaml"
+if [ -f "$CTX_BUILD" ] && [ ! -f "$CTX_STORE" ]; then
+  if HARNESS_ROOT="$TARGET" bash "$CTX_BUILD" >/dev/null 2>&1 && [ -f "$CTX_STORE" ]; then
+    echo "[scaffold] built .harness/context/pipeline-context.yaml (H1)"
+  else
+    echo "[scaffold] could not build the H1 pointer store (non-fatal)"
+  fi
 fi
 
 # --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (--merge-claude) ---

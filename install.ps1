@@ -110,7 +110,7 @@ $syncJson = Join-Path $syncDir "portal-sync.json"
 if (-not (Test-Path $syncJson)) {
     $syncTmpl = @"
 {
-  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. Set pdp_enforce to true to make the PreToolUse hook consult the Portal PDP (H4 outbound allowlist, H5 approval, H3 release gate) — leave false to keep it off. You may delete this _README line.",
+  "_README": "Fill portal_url and project_id from your Control Portal (open the Project, then Settings, then Reveal ingest key). Next, paste the ingest key into portal-sync.key in THIS same .harness folder. Set pdp_enforce to true to make the PreToolUse hook consult the Portal PDP (H4 outbound allowlist, H5 approval, H3 release gate) -- leave false to keep it off. You may delete this _README line.",
   "portal_url": "https://YOUR-PORTAL-DOMAIN",
   "project_id": "PASTE-PROJECT-ID-HERE",
   "pdp_enforce": false,
@@ -131,14 +131,44 @@ if (-not (Test-Path $syncKey)) {
     Write-Output "[scaffold] .harness\portal-sync.key already exists -> kept"
 }
 
+# --- Buglist scaffold (M6): every project gets a living buglist.md at its root
+# from the shipped template, so AI has a mandated place to log bugs (system OR
+# AI-introduced). NEVER overwrite an existing buglist. ---
+$bugFile = Join-Path $TargetDir "buglist.md"
+$bugTmpl = Join-Path $syncDir "templates\buglist.md"
+if (-not (Test-Path $bugFile)) {
+    if (Test-Path $bugTmpl) {
+        $t = (Get-Content $bugTmpl -Raw -Encoding utf8).Replace("<PROJECT>", (Split-Path $TargetDir -Leaf))
+        [System.IO.File]::WriteAllText($bugFile, $t, $Utf8NoBom)
+        Write-Output "[scaffold] created buglist.md (log every bug here -- see rule in the file)"
+    }
+} else {
+    Write-Output "[scaffold] buglist.md already exists -> kept"
+}
+
 # C5: never commit the ingest key. Ensure the target project's .gitignore
-# ignores it (idempotent — add the line only if missing).
+# ignores it (idempotent -- add the line only if missing).
 $giPath = Join-Path $TargetDir ".gitignore"
 $giLine = ".harness/portal-sync.key"
 $giHas = (Test-Path $giPath) -and (Select-String -Path $giPath -SimpleMatch $giLine -Quiet)
 if (-not $giHas) {
     Add-Content -Path $giPath -Value "`n# Harness Portal ingest key - secret, never commit (C5)`n$giLine" -Encoding utf8
     Write-Output "[scaffold] added portal-sync.key to .gitignore (C5)"
+}
+
+# --- H1 scaffold: build the context pointer store so a freshly-onboarded project
+# satisfies its own context contract right away (the policy-ci suite asserts it,
+# and the release gate would otherwise block until the first session ran the
+# hook). Best-effort: a failure here must never fail the install.
+$ctxBuild = Join-Path $TargetDir ".harness\scripts\powershell\harness-context-build.ps1"
+$ctxStore = Join-Path $TargetDir ".harness\context\pipeline-context.yaml"
+if ((Test-Path $ctxBuild) -and (-not (Test-Path $ctxStore))) {
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $ctxBuild -HarnessRoot $TargetDir *> $null
+        if (Test-Path $ctxStore) { Write-Output "[scaffold] built .harness\context\pipeline-context.yaml (H1)" }
+    } catch {
+        Write-Warning "[scaffold] could not build the H1 pointer store (non-fatal): $($_.Exception.Message)"
+    }
 }
 
 # --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (-MergeClaude) ---

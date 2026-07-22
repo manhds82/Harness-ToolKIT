@@ -7,3 +7,4 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+docs/MAINTAINER-COMMANDS.md
