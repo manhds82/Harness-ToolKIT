@@ -13,12 +13,18 @@
 set -euo pipefail
 
 BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0
+PROJECT_NAME=""; PROJECT_DESC=""; FORCE_IDENTITY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle)       BUNDLE="$2"; shift 2;;
     --target)       TARGET="$2"; shift 2;;
     --force)        FORCE=1; shift;;
-    --merge-claude) MERGE_CLAUDE=1; shift;;
+    # --merge-claude is the old name; both project the governance text into every
+    # guide file listed in casan-policies governance.guide_targets.
+    --merge-guides|--merge-claude) MERGE_CLAUDE=1; shift;;
+    --project-name)        PROJECT_NAME="$2"; shift 2;;
+    --project-description) PROJECT_DESC="$2"; shift 2;;
+    --force-identity)      FORCE_IDENTITY=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -45,14 +51,30 @@ comp = hashlib.sha256(hi.encode("utf-8")).hexdigest()
 if comp != b["content_hash"]:
     sys.exit("Bundle integrity check FAILED: computed %s != declared %s" % (comp, b["content_hash"]))
 print("[install] %s v%s (%d files) -> %s" % (b["name"], b["version"], b["file_count"], target))
-written = skipped = 0
+written = skipped = kept = 0
+# Files the project OWNS once they exist: never overwritten, not even with
+# --force, because they carry per-project decisions. When the shipped copy has
+# moved on, a `<file>.new` is dropped beside it to adopt new keys deliberately.
+preserve = set(b.get("preserve") or [])
 for f in b["files"]:
     dest = os.path.join(target, *f["path"].split("/"))
+    data = base64.b64decode(f["b64"])
+    if os.path.exists(dest) and f["path"] in preserve:
+        with open(dest, "rb") as fh:
+            same = fh.read() == data
+        if same:
+            print("  [KEEP]  %s (yours; identical to shipped)" % f["path"])
+        else:
+            with open(dest + ".new", "wb") as fh:
+                fh.write(data)
+            print("  [KEEP]  %s (yours; shipped copy saved as %s.new)" % (f["path"], f["path"]))
+        kept += 1
+        continue
     if os.path.exists(dest) and not force:
         print("  [SKIP] %s (exists; use --force to overwrite)" % f["path"]); skipped += 1; continue
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with open(dest, "wb") as fh:
-        fh.write(base64.b64decode(f["b64"]))
+        fh.write(data)
     print("  [WRITE] %s" % f["path"]); written += 1
 
 # Install receipt for the in-project uninstaller (path + original sha256).
@@ -67,7 +89,7 @@ receipt = {
 rdir = os.path.join(target, ".harness"); os.makedirs(rdir, exist_ok=True)
 with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as fh:
     _json.dump(receipt, fh, indent=2)
-print("[install] done: %d written, %d skipped. Integrity OK (%s)." % (written, skipped, b["content_hash"]))
+print("[install] done: %d written, %d skipped, %d kept (project-owned). Integrity OK (%s)." % (written, skipped, kept, b["content_hash"]))
 PY
 
 # --- Portal-sync scaffold: create the two files a newcomer would otherwise have
@@ -131,23 +153,105 @@ if [ -f "$CTX_BUILD" ] && [ ! -f "$CTX_STORE" ]; then
   fi
 fi
 
-# --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (--merge-claude) ---
-if [[ "$MERGE_CLAUDE" -eq 1 ]]; then
-  HARNESS_MD="$TARGET/CLAUDE.harness.md"
-  CLAUDE_MD="$TARGET/CLAUDE.md"
-  if [[ ! -f "$HARNESS_MD" ]]; then
-    echo "[merge] WARNING: CLAUDE.harness.md not found in target -- skipping" >&2
-  elif grep -q '<!--.*harness:merged.*-->' "$CLAUDE_MD" 2>/dev/null; then
-    echo "[SKIP]  CLAUDE.md already contains harness governance (sentinel found -- skipping)"
-  elif [[ ! -f "$CLAUDE_MD" ]]; then
-    cp "$HARNESS_MD" "$CLAUDE_MD"
-    echo "[MERGE] created CLAUDE.md from CLAUDE.harness.md"
-  else
-    printf '\n\n---\n<!-- harness:merged -->\n\n' >> "$CLAUDE_MD"
-    cat "$HARNESS_MD" >> "$CLAUDE_MD"
-    echo "[MERGE] appended harness governance to existing CLAUDE.md"
-  fi
-fi
+# --- Project identity + governance projection (--merge-guides) ---
+# ONE canonical text (CLAUDE.harness.md) -> every agent-guide file the project
+# uses, as a DELIMITED managed block, so re-installing refreshes only that block
+# and never touches what the project wrote around it.
+"$PY" - "$TARGET" "$MERGE_CLAUDE" "$PROJECT_NAME" "$PROJECT_DESC" "$FORCE_IDENTITY" <<'PY'
+import os, re, sys
+target, do_guides = sys.argv[1], sys.argv[2] == "1"
+pname, pdesc, force_id = sys.argv[3], sys.argv[4], sys.argv[5] == "1"
+
+# ---- identity: patch only the two scalars inside the `project:` block --------
+if pname:
+    if not pdesc:
+        pdesc = pname
+    contract = os.path.join(target, "contracts", "project.yaml")
+    if not os.path.isfile(contract):
+        print("[identity] contracts/project.yaml not found -- skipped")
+    else:
+        lines = open(contract, encoding="utf-8").read().split("\n")
+        cur, inp = "", False
+        for ln in lines:
+            if re.match(r"^project:\s*$", ln):
+                inp = True; continue
+            if inp:
+                if re.match(r"^\S", ln): break
+                m = re.match(r"^\s+name:\s*(.*)$", ln)
+                if m: cur = m.group(1).strip().strip('"')
+        placeholder = cur in ("", "harness-toolkit", "my-project")
+        if not force_id and not placeholder:
+            print("[identity] kept existing project name '%s' (use --force-identity to overwrite)" % cur)
+        else:
+            out, inp, changed = [], False, False
+            for ln in lines:
+                if re.match(r"^project:\s*$", ln):
+                    inp = True; out.append(ln); continue
+                if inp:
+                    if re.match(r"^\S", ln):
+                        inp = False
+                    else:
+                        m = re.match(r"^(\s+)name:\s*", ln)
+                        if m:
+                            out.append('%sname: "%s"' % (m.group(1), pname)); changed = True; continue
+                        m = re.match(r"^(\s+)description:\s*", ln)
+                        if m:
+                            out.append('%sdescription: "%s"' % (m.group(1), pdesc)); changed = True; continue
+                out.append(ln)
+            if changed:
+                open(contract, "w", encoding="utf-8", newline="\n").write("\n".join(out))
+                print("[identity] contracts/project.yaml -> name/description = '%s'" % pname)
+            else:
+                print("[identity] could not find name/description under 'project:' -- skipped")
+
+# ---- guides: project the common governance text -----------------------------
+if do_guides:
+    src = os.path.join(target, "CLAUDE.harness.md")
+    if not os.path.isfile(src):
+        print("[guides] CLAUDE.harness.md not found in target -- skipping")
+        sys.exit(0)
+    gov = open(src, encoding="utf-8").read().strip()
+
+    # C2: the target list is data (casan-policies governance.guide_targets).
+    targets, policy = [], os.path.join(target, ".harness", "control", "casan-policies.yaml")
+    if os.path.isfile(policy):
+        inb = False
+        for ln in open(policy, encoding="utf-8-sig"):
+            ln = ln.rstrip("\n")
+            if re.match(r"^\s*guide_targets:\s*(#.*)?$", ln):
+                inb = True; continue
+            if inb:
+                if re.match(r"^\s*#", ln): continue
+                m = re.match(r"^\s*-\s*(.+?)\s*$", ln)
+                if m:
+                    v = re.sub(r"\s+#.*$", "", m.group(1)).strip().strip('"').strip("'")
+                    if v: targets.append(v)
+                elif ln.strip():
+                    break
+    if not targets:
+        targets = ["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md"]
+
+    BEGIN, END = "<!-- BEGIN harness-governance -->", "<!-- END harness-governance -->"
+    note = ("<!-- standard-governance - MANAGED BLOCK. Edits inside are replaced on the next "
+            "install; put your own project rules OUTSIDE this block. -->")
+    block = "%s\n%s\n\n%s\n\n%s" % (BEGIN, note, gov, END)
+    for rel in targets:
+        p = os.path.join(target, *rel.split("/"))
+        os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+        if not os.path.exists(p):
+            open(p, "w", encoding="utf-8", newline="\n").write(block + "\n")
+            print("[guides] created %s" % rel); continue
+        cur = open(p, encoding="utf-8").read()
+        bi, ei = cur.find(BEGIN), cur.find(END)
+        if bi >= 0 and ei > bi:
+            open(p, "w", encoding="utf-8", newline="\n").write(cur[:bi] + block + cur[ei + len(END):])
+            print("[guides] refreshed managed block in %s" % rel)
+        elif re.search(r"<!--\s*harness:merged\s*-->", cur):
+            print("[guides] %s has a legacy merged block -- left as is" % rel)
+        else:
+            open(p, "w", encoding="utf-8", newline="\n").write(cur.rstrip() + "\n\n---\n\n" + block + "\n")
+            print("[guides] appended governance to existing %s (your content untouched)" % rel)
+PY
 
 # --- OS hook selection (macOS/Linux): use the bash hooks, not the .ps1 ones ---
 # The bundle ships settings.json (Windows/powershell) + settings.posix.json

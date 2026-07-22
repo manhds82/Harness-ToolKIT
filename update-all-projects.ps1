@@ -24,7 +24,9 @@ param(
     [string]$BundleDir = "",
     [switch]$Reinstall,
     [switch]$PdpEnforce,   # also turn on server-side PDP enforcement in each portal-sync.json
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [switch]$NoIdentity,   # do NOT stamp project name/description from the folder name
+    [switch]$ForceIdentity # overwrite the name even when the project already set one
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,7 +82,16 @@ foreach ($p in $projects) {
 
     Write-Host ("  > {0,-26} v{1} -> v{2}" -f $p.Name, $cur, $LatestVer) -ForegroundColor Cyan
     try {
-        & $Installer -BundleFile $latest.File -TargetDir $root -Force -MergeClaude | Out-Null
+        # Identity: name the project after its folder. The installer only writes
+        # it when contracts/project.yaml still carries the shipped placeholder,
+        # so a project that already named itself is never renamed (unless
+        # -ForceIdentity). -NoIdentity opts out entirely.
+        $idArgs = @()
+        if (-not $NoIdentity) {
+            $idArgs += @("-ProjectName", $p.Name, "-ProjectDescription", $p.Name)
+            if ($ForceIdentity) { $idArgs += "-ForceIdentity" }
+        }
+        & $Installer -BundleFile $latest.File -TargetDir $root -Force -MergeGuides @idArgs | Out-Null
         # Rebuild H1 retrieval index so context-query works immediately (best-effort).
         $rag = Join-Path $root ".harness\scripts\lib\harness_rag.py"
         if ($py -and (Test-Path $rag)) { $env:HARNESS_ROOT = $root; & $py.Source $rag index --root $root *>$null }

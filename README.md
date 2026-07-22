@@ -217,11 +217,36 @@ exiting `0`; the bundled guard scripts already do this.
      `identity.roles`, not a top-level key).
    - top-level `budget:` — `max_tokens_per_session`, `max_cost_per_session_usd`,
      `alert_at_percent`.
-2. **`CLAUDE.harness.md` → your `CLAUDE.md`** — pass `-MergeClaude` /
-   `--merge-claude` during install to do this automatically (recommended), or
-   open both files side by side and copy the **Guiding Principles**,
-   **Conventions C1–C10**, and **Model Reference** sections manually. Keep
-   `CLAUDE.harness.md` as a read-only reference or delete it once merged.
+   You can set the first two at install time instead:
+   `-ProjectName "MyApp"` (description defaults to the name). It only writes
+   while the contract still holds the shipped placeholder, so a project that
+   already named itself is never renamed — `-ForceIdentity` overrides.
+2. **Governance for every assistant, not just Claude** — pass `-MergeGuides` /
+   `--merge-guides` at install (`-MergeClaude` still works as an alias). The one
+   canonical text (`CLAUDE.harness.md`) is projected into each guide file your
+   tools read:
+
+   | File | Read by |
+   |------|---------|
+   | `CLAUDE.md` | Claude Code |
+   | `AGENTS.md` | the cross-tool convention (Codex, Cursor, Jules, …) |
+   | `.github/copilot-instructions.md` | GitHub Copilot |
+
+   Edit the list in `.harness/control/casan-policies.yaml` →
+   `governance.guide_targets` — adding a tool is one line, no script change.
+
+   **Your content is never lost.** The text goes between
+   `<!-- BEGIN harness-governance -->` and `<!-- END harness-governance -->`.
+   A missing file is created, an existing one is **appended to**, and an update
+   replaces only what is inside the markers. Keep your own rules **outside** the
+   block and they survive every update; running install twice never duplicates it.
+
+   > **Honest scope.** Only Claude Code *enforces* these rules, via
+   > `.claude/settings.json` hooks and permission deny lists. Copilot, Codex and
+   > friends have **no hook mechanism** — for them this file is guidance a model
+   > may ignore. If you need them actually constrained, the control must sit
+   > outside the assistant: a server-side gateway, CI that fails the build, and
+   > branch protection + `CODEOWNERS` over `.harness/** .claude/** contracts/**`.
 3. **`.harness/control/risk-policy.yaml`** — add/adjust the command deny
    patterns for your project. Guard scripts **read** this YAML, so you change
    policy by editing config, not scripts.
@@ -253,8 +278,28 @@ file_count   : 89
 
 ## Update
 
-Re-run `install.ps1` with a newer bundle and `-Force` to overwrite the managed
-files (back up any you customized first — or let uninstall's backup handle it).
+Re-run `install.ps1` / `install.sh` with a newer bundle. Additive by default; add
+`-Force` / `--force` to bring every managed file up to the current version.
+
+**Your project-owned files are safe.** The bundle declares a `preserve` list —
+`contracts/project.yaml` and `.harness/control/casan-policies.yaml` are **never
+overwritten once they exist, not even with `--force`**, because they hold your
+identity, stack, doc refs and tuned suite commands. When the shipped copy has
+moved on you get a `<file>.new` beside yours to diff and adopt new keys on
+purpose. Guide files (`CLAUDE.md`, `AGENTS.md`, …) are merged, not replaced:
+only the `BEGIN/END harness-governance` block is refreshed.
+
+To update many projects at once (maintainer):
+
+```powershell
+powershell -File update-all-projects.ps1 [-WhatIf] [-NoIdentity] [-ForceIdentity]
+```
+```bash
+bash update-all-projects.sh [--dry-run] [--no-identity] [--force-identity]
+```
+Each project is reinstalled to the newest bundle, named after its folder in
+`contracts/project.yaml` (unless it already named itself), and its guide files
+are refreshed.
 
 ## Uninstall (gated + audited)
 

@@ -21,7 +21,18 @@ param(
     [string]$BundleFile = "",
     [string]$TargetDir  = ".",
     [switch]$Force = $false,
-    [switch]$MergeClaude = $false
+    # Project the common governance text into every agent-guide file the project
+    # uses (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md, ... - the list
+    # is data, see casan-policies.yaml governance.guide_targets). The old name is
+    # kept so existing callers/scripts keep working.
+    [Alias("MergeClaude")]
+    [switch]$MergeGuides = $false,
+    # Stamp the project's identity into contracts/project.yaml on install.
+    [string]$ProjectName = "",
+    [string]$ProjectDescription = "",
+    # By default identity is only written when the file still carries the shipped
+    # placeholder, so a project that named itself is never renamed behind its back.
+    [switch]$ForceIdentity = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,9 +75,29 @@ if ($computed -ne $bundle.content_hash) {
 Write-Output "[install] $($bundle.name) v$($bundle.version) ($($bundle.file_count) files) -> $TargetDir"
 if (-not (Test-Path $TargetDir)) { New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null }
 
-$written = 0; $skipped = 0
+# Files the project owns: never overwritten once they exist, not even with
+# -Force, because they carry per-project decisions. When the shipped copy has
+# moved on, drop a `<file>.new` beside it so new keys can be adopted on purpose.
+$preserve = @()
+if ($bundle.PSObject.Properties.Name -contains 'preserve' -and $bundle.preserve) { $preserve = @($bundle.preserve) }
+
+$written = 0; $skipped = 0; $kept = 0
 foreach ($f in $bundle.files) {
     $dest = Join-Path $TargetDir ($f.path -replace '/', '\')
+    $bytes = [Convert]::FromBase64String($f.b64)
+
+    if ((Test-Path $dest) -and ($preserve -contains $f.path)) {
+        $same = $false
+        try { $same = [System.Linq.Enumerable]::SequenceEqual([byte[]](Get-Content -Path $dest -Encoding Byte -Raw), $bytes) } catch { }
+        if (-not $same) {
+            [System.IO.File]::WriteAllBytes("$dest.new", $bytes)
+            Write-Output "  [KEEP]  $($f.path) (yours; shipped copy saved as $($f.path).new)"
+        } else {
+            Write-Output "  [KEEP]  $($f.path) (yours; identical to shipped)"
+        }
+        $kept++
+        continue
+    }
     if ((Test-Path $dest) -and -not $Force) {
         Write-Output "  [SKIP] $($f.path) (exists; use -Force to overwrite)"
         $skipped++
@@ -74,7 +105,7 @@ foreach ($f in $bundle.files) {
     }
     $destDir = Split-Path -Parent $dest
     if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
-    [System.IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($f.b64))
+    [System.IO.File]::WriteAllBytes($dest, $bytes)
     Write-Output "  [WRITE] $($f.path)"
     $written++
 }
@@ -97,7 +128,7 @@ $receipt = [ordered]@{
 } | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText((Join-Path $receiptDir ".bundle-manifest.json"), $receipt, $Utf8NoBom)
 
-Write-Output "[install] done: $written written, $skipped skipped. Integrity OK ($($bundle.content_hash))."
+Write-Output "[install] done: $written written, $skipped skipped, $kept kept (project-owned). Integrity OK ($($bundle.content_hash))."
 
 # --- Portal-sync scaffold: create the two files a newcomer would otherwise
 # have to hand-author, at the right location, ready to edit. NEVER overwrite an
@@ -171,25 +202,111 @@ if ((Test-Path $ctxBuild) -and (-not (Test-Path $ctxStore))) {
     }
 }
 
-# --- Auto-merge CLAUDE.harness.md -> CLAUDE.md (-MergeClaude) ---
-if ($MergeClaude) {
+# --- Project identity: stamp name/description into contracts/project.yaml ---
+# Patches ONLY the two scalars inside the `project:` block, so comments and every
+# other key in the contract survive untouched.
+function Set-ProjectIdentity {
+    param([string]$Path, [string]$Name, [string]$Description, [bool]$Force)
+    if (-not (Test-Path $Path)) { return "no-contract" }
+    $lines = [System.IO.File]::ReadAllText($Path, $Utf8NoBom) -split "`r?`n"
+    $inProject = $false; $changed = $false; $curName = ""
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^project:\s*$') { $inProject = $true; continue }
+        if ($inProject) {
+            if ($lines[$i] -match '^\S') { break }                      # dedent = block ended
+            if ($lines[$i] -match '^(\s+)name:\s*(.*)$') { $curName = $matches[2].Trim().Trim('"') }
+        }
+    }
+    # The shipped contract carries the toolkit's own identity; treat that (and an
+    # empty name) as "not yet claimed by this project".
+    $isPlaceholder = ($curName -eq "" -or $curName -eq "harness-toolkit" -or $curName -eq "my-project")
+    if (-not $Force -and -not $isPlaceholder) { return "kept:$curName" }
+
+    $inProject = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^project:\s*$') { $inProject = $true; continue }
+        if ($inProject) {
+            if ($lines[$i] -match '^\S') { break }
+            if ($lines[$i] -match '^(\s+)name:\s*') {
+                $lines[$i] = "$($matches[1])name: `"$Name`""; $changed = $true
+            } elseif ($lines[$i] -match '^(\s+)description:\s*') {
+                $lines[$i] = "$($matches[1])description: `"$Description`""; $changed = $true
+            }
+        }
+    }
+    if (-not $changed) { return "no-fields" }
+    [System.IO.File]::WriteAllText($Path, ($lines -join "`n"), $Utf8NoBom)
+    return "set"
+}
+
+if ($ProjectName) {
+    if (-not $ProjectDescription) { $ProjectDescription = $ProjectName }
+    $contract = Join-Path $TargetDir "contracts\project.yaml"
+    $r = Set-ProjectIdentity -Path $contract -Name $ProjectName -Description $ProjectDescription -Force:$ForceIdentity
+    switch -Wildcard ($r) {
+        "set"          { Write-Output "[identity] contracts/project.yaml -> name/description = '$ProjectName'" }
+        "kept:*"       { Write-Output "[identity] kept existing project name '$($r.Substring(5))' (use -ForceIdentity to overwrite)" }
+        "no-contract"  { Write-Warning "[identity] contracts/project.yaml not found -- skipped" }
+        default        { Write-Warning "[identity] could not find name/description under 'project:' -- skipped" }
+    }
+}
+
+# --- Project the common governance text into every agent-guide file ---
+# ONE canonical source (CLAUDE.harness.md) -> many tool-specific files. The block
+# is delimited, so re-installing REPLACES only the managed block and never
+# touches whatever the project wrote around it.
+if ($MergeGuides) {
     $harnessMd = Join-Path $TargetDir "CLAUDE.harness.md"
-    $claudeMd  = Join-Path $TargetDir "CLAUDE.md"
     if (-not (Test-Path $harnessMd)) {
-        Write-Warning "[merge] CLAUDE.harness.md not found in target -- skipping (bundle may not ship it)"
+        Write-Warning "[guides] CLAUDE.harness.md not found in target -- skipping (bundle may not ship it)"
     } else {
-        $harnessContent = [System.IO.File]::ReadAllText($harnessMd, $Utf8NoBom)
-        if (-not (Test-Path $claudeMd)) {
-            [System.IO.File]::WriteAllText($claudeMd, $harnessContent, $Utf8NoBom)
-            Write-Output "[MERGE] created CLAUDE.md from CLAUDE.harness.md"
-        } else {
-            $existing = [System.IO.File]::ReadAllText($claudeMd, $Utf8NoBom)
-            if ($existing -match '<!--\s*harness:merged\s*-->') {
-                Write-Output "[SKIP]  CLAUDE.md already contains harness governance (sentinel found -- skipping)"
+        $govText = ([System.IO.File]::ReadAllText($harnessMd, $Utf8NoBom)).Trim()
+
+        # C2: the target list is data, not code. Falls back to the common trio.
+        $targets = @()
+        $policy = Join-Path $TargetDir ".harness\control\casan-policies.yaml"
+        if (Test-Path $policy) {
+            $inBlock = $false
+            foreach ($line in (Get-Content $policy -Encoding utf8)) {
+                if ($line -match '^\s*guide_targets:\s*(#.*)?$') { $inBlock = $true; continue }
+                if ($inBlock) {
+                    if ($line -match '^\s*#') { continue }
+                    if ($line -match '^\s*-\s*(.+?)\s*$') {
+                        $v = ($matches[1] -replace '\s+#.*$', '').Trim().Trim('"').Trim("'")
+                        if ($v) { $targets += $v }
+                    } elseif ($line -match '\S') { break }
+                }
+            }
+        }
+        if (-not $targets) { $targets = @("CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md") }
+
+        $begin = "<!-- BEGIN harness-governance -->"
+        $end   = "<!-- END harness-governance -->"
+        $note  = "<!-- standard-governance v$($bundle.version) - MANAGED BLOCK. Edits inside are replaced on the next install; put your own project rules OUTSIDE this block. -->"
+        $block = "$begin`n$note`n`n$govText`n`n$end"
+
+        foreach ($rel in $targets) {
+            $p = Join-Path $TargetDir ($rel -replace '/', '\')
+            $dir = Split-Path -Parent $p
+            if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            if (-not (Test-Path $p)) {
+                [System.IO.File]::WriteAllText($p, $block + "`n", $Utf8NoBom)
+                Write-Output "[guides] created $rel"
+                continue
+            }
+            $existing = [System.IO.File]::ReadAllText($p, $Utf8NoBom)
+            $bi = $existing.IndexOf($begin); $ei = $existing.IndexOf($end)
+            if ($bi -ge 0 -and $ei -gt $bi) {
+                $pre = $existing.Substring(0, $bi)
+                $post = $existing.Substring($ei + $end.Length)
+                [System.IO.File]::WriteAllText($p, $pre + $block + $post, $Utf8NoBom)
+                Write-Output "[guides] refreshed managed block in $rel"
+            } elseif ($existing -match '<!--\s*harness:merged\s*-->') {
+                # Pre-1.5.0 merge had no end marker; appending again would duplicate.
+                Write-Output "[guides] $rel has a legacy merged block -- left as is (wrap it in BEGIN/END to get updates)"
             } else {
-                $sep = "`n`n---`n<!-- harness:merged -->`n`n"
-                [System.IO.File]::WriteAllText($claudeMd, $existing.TrimEnd() + $sep + $harnessContent, $Utf8NoBom)
-                Write-Output "[MERGE] appended harness governance to existing CLAUDE.md"
+                [System.IO.File]::WriteAllText($p, $existing.TrimEnd() + "`n`n---`n`n" + $block + "`n", $Utf8NoBom)
+                Write-Output "[guides] appended governance to existing $rel (your content untouched)"
             }
         }
     }

@@ -11,12 +11,14 @@
 set -euo pipefail
 
 BASE_DIR="${BASE_DIR:-$HOME/SourceCode}"
-DRY=0; REINSTALL=0; PDP=0
+DRY=0; REINSTALL=0; PDP=0; NO_IDENTITY=0; FORCE_IDENTITY=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1;;
     --reinstall) REINSTALL=1;;
     --pdp-enforce) PDP=1;;
+    --no-identity) NO_IDENTITY=1;;        # do not stamp name/description from the folder
+    --force-identity) FORCE_IDENTITY=1;;  # overwrite even a name the project already set
   esac
 done
 
@@ -59,7 +61,15 @@ for d in "$BASE_DIR"/*/; do
   fi
 
   printf '  > %-26s v%s -> v%s\n' "$name" "$cur" "$LATEST_VER"
-  if bash "$INSTALLER" --bundle "$LATEST_FILE" --target "$d" --force --merge-claude >/dev/null 2>&1; then
+  # Name the project after its folder. The installer only writes it while the
+  # contract still carries the shipped placeholder, so a project that named
+  # itself is never renamed (unless --force-identity).
+  ID_ARGS=()
+  if [[ "$NO_IDENTITY" -eq 0 ]]; then
+    ID_ARGS+=(--project-name "$name" --project-description "$name")
+    [[ "$FORCE_IDENTITY" -eq 1 ]] && ID_ARGS+=(--force-identity)
+  fi
+  if bash "$INSTALLER" --bundle "$LATEST_FILE" --target "$d" --force --merge-guides "${ID_ARGS[@]}" >/dev/null 2>&1; then
     rag="$d/.harness/scripts/lib/harness_rag.py"
     [ -f "$rag" ] && command -v python3 >/dev/null 2>&1 && HARNESS_ROOT="$d" python3 "$rag" index --root "$d" >/dev/null 2>&1 || true
     updated=$((updated+1))
