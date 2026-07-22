@@ -36,6 +36,8 @@ while IFS= read -r f; do
   fi
 done < <(ls "$BUNDLE_DIR"/*.bundle.json 2>/dev/null)
 [ -z "$LATEST_FILE" ] && { echo "No bundle found in $BUNDLE_DIR" >&2; exit 1; }
+# Content hash = the real identity of a build (a version can be repacked).
+LATEST_HASH=$(grep -oE '"content_hash"[^,]*' "$LATEST_FILE" | head -1 | grep -oE '[0-9a-f]{64}' || true)
 
 echo "=================================================================="
 echo " Latest bundle: standard-governance v$LATEST_VER"
@@ -48,12 +50,20 @@ for d in "$BASE_DIR"/*/; do
   case "$name" in HarnessAI-ToolKIT|Harness-ToolKIT) continue;; esac
   [ -d "$d/.harness" ] || continue
 
-  cur="-"
+  cur="-"; cur_hash=""
   if [ -f "$d/.harness/.bundle-manifest.json" ]; then
     cur=$(grep -oE '"version"[^,]*' "$d/.harness/.bundle-manifest.json" | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "-")
+    cur_hash=$(grep -oE '"content_hash"[^,]*' "$d/.harness/.bundle-manifest.json" | head -1 | grep -oE '[0-9a-f]{64}' || true)
   fi
 
-  if [ "$cur" = "$LATEST_VER" ] && [ $REINSTALL -eq 0 ]; then
+  # "Up to date" means the CONTENT matches, not just the version string: a
+  # repacked version (same number, different files) must not be skipped.
+  if [ -n "$LATEST_HASH" ] && [ -n "$cur_hash" ]; then
+    [ "$cur_hash" = "$LATEST_HASH" ] && is_current=1 || is_current=0
+  else
+    [ "$cur" = "$LATEST_VER" ] && is_current=1 || is_current=0
+  fi
+  if [ "$is_current" -eq 1 ] && [ $REINSTALL -eq 0 ]; then
     printf '  = %-26s v%s  (up-to-date)\n' "$name" "$cur"; uptodate=$((uptodate+1)); continue
   fi
   if [ $DRY -eq 1 ]; then

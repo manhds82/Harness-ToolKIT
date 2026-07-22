@@ -44,6 +44,11 @@ $latest = Get-ChildItem "$BundleDir\*.bundle.json" -ErrorAction SilentlyContinue
 
 if (-not $latest) { throw "No standard-governance-*.bundle.json found in $BundleDir" }
 $LatestVer = $latest.V.ToString()
+# Content hash of the artifact we are about to install -- the real identity of a
+# build. Compared against each project's receipt so a repacked version is not
+# mistaken for "already installed".
+$LatestHash = ""
+try { $LatestHash = (Get-Content $latest.File -Raw -Encoding utf8 | ConvertFrom-Json).content_hash } catch { }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host " Latest bundle: standard-governance v$LatestVer" -ForegroundColor Green
 Write-Host " Base dir     : $BaseDir$(if ($WhatIf) { '   [DRY RUN]' })" -ForegroundColor Green
@@ -63,12 +68,20 @@ $py = (Get-Command python3 -ErrorAction SilentlyContinue); if (-not $py) { $py =
 foreach ($p in $projects) {
     $root = $p.FullName
     $manifest = Join-Path $root ".harness\.bundle-manifest.json"
-    $cur = "-"
+    $cur = "-"; $curHash = ""
     if (Test-Path $manifest) {
-        try { $cur = (Get-Content $manifest -Raw -Encoding utf8 | ConvertFrom-Json).version } catch { }
+        try {
+            $m = Get-Content $manifest -Raw -Encoding utf8 | ConvertFrom-Json
+            $cur = $m.version
+            if ($m.PSObject.Properties.Name -contains 'content_hash') { $curHash = $m.content_hash }
+        } catch { }
     }
 
-    if ($cur -eq $LatestVer -and -not $Reinstall) {
+    # "Up to date" means the CONTENT matches, not just the version string. A
+    # version that was repacked (same number, different files) would otherwise be
+    # silently skipped and the project left on the older artifact.
+    $isCurrent = if ($LatestHash -and $curHash) { $curHash -eq $LatestHash } else { $cur -eq $LatestVer }
+    if ($isCurrent -and -not $Reinstall) {
         Write-Host ("  = {0,-26} v{1}  (up-to-date)" -f $p.Name, $cur) -ForegroundColor DarkGray
         $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $cur; Status = "up-to-date" }
         continue

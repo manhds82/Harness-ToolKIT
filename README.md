@@ -17,7 +17,7 @@ analyze → implement → verify → evidence pipeline.
 
 | File | Purpose |
 |------|---------|
-| `standard-governance-1.5.0.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
+| `standard-governance-1.5.1.bundle.json` | The packaged governance bundle — 115 files (agents, skills, per-OS hook settings, control policies, contract templates, JSON schemas, the golden-set eval dataset, the ready-to-run `policy-ci`/`red-team`/`golden` suites, and **both** PowerShell + bash scripts), base64-encoded with a SHA-256 content hash. **This is the product.** |
 | `install.ps1` / `install.sh` | The installer (Windows / macOS-Linux). Verifies the bundle's content hash **before** writing anything (fail-closed), then materializes every file byte-exact into your project. |
 | `uninstall.ps1` / `uninstall.sh` | Gated, audited uninstaller. Removes exactly the installed files; keeps files you edited (or backs them up with `-Force`/`--force`); honors a PM lock. |
 | `harness-lock.ps1` / `harness-lock.sh` | PM tool to lock/unlock uninstall behind an approval code. |
@@ -46,7 +46,7 @@ analyze → implement → verify → evidence pipeline.
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.0.bundle.json `
+    -BundleFile standard-governance-1.5.1.bundle.json `
     -TargetDir C:\path\to\your-project
 ```
 
@@ -55,7 +55,7 @@ powershell -File install.ps1 `
 git clone https://github.com/manhds82/Harness-ToolKIT.git
 cd Harness-ToolKIT
 bash install.sh \
-    --bundle standard-governance-1.5.0.bundle.json \
+    --bundle standard-governance-1.5.1.bundle.json \
     --target /path/to/your-project
 ```
 
@@ -64,33 +64,40 @@ overwrite an existing file** unless you pass `-Force` / `--force` (so your own
 `CLAUDE.md`, `.claude/settings.json`, etc. stay safe), and **refuse to write
 anything if the content hash doesn't match** (tamper / corruption check).
 
-### Auto-merge governance into CLAUDE.md
+### Auto-write the governance rules for every assistant
 
-Pass `-MergeClaude` (PowerShell) or `--merge-claude` (bash) to automatically
-merge the harness governance reference into your project's `CLAUDE.md` in one
-step — no manual copy-paste needed:
+Pass `-MergeGuides` (PowerShell) or `--merge-guides` (bash) — `-MergeClaude` /
+`--merge-claude` still work as aliases — and add `-ProjectName` to name the
+project in one step:
 
 ```powershell
-# Windows: install + auto-merge CLAUDE.md
+# Windows: install + governance guides + project identity
 powershell -File install.ps1 `
-    -BundleFile standard-governance-1.5.0.bundle.json `
+    -BundleFile standard-governance-1.5.1.bundle.json `
     -TargetDir C:\path\to\your-project `
-    -MergeClaude
+    -MergeGuides -ProjectName "your-project"
 ```
 
 ```bash
-# macOS / Linux: install + auto-merge CLAUDE.md
+# macOS / Linux
 bash install.sh \
-    --bundle standard-governance-1.5.0.bundle.json \
+    --bundle standard-governance-1.5.1.bundle.json \
     --target /path/to/your-project \
-    --merge-claude
+    --merge-guides --project-name "your-project"
 ```
 
-Behaviour:
-- **No `CLAUDE.md` yet** → creates it from `CLAUDE.harness.md`.
-- **`CLAUDE.md` exists, no harness section** → appends the harness governance
-  block with a `<!-- harness:merged -->` sentinel.
-- **Sentinel already present** → skips silently (safe to re-run with `-Force`).
+The one canonical text (`CLAUDE.harness.md`) is written into **every guide file
+your tools read** — `CLAUDE.md` (Claude Code), `AGENTS.md` (the cross-tool
+convention used by Codex/Cursor/Jules), `.github/copilot-instructions.md`
+(GitHub Copilot). The list is config, in
+`.harness/control/casan-policies.yaml` → `governance.guide_targets`.
+
+Behaviour — **your content is never lost**:
+- **File does not exist** → created with the managed block.
+- **File exists** → the block is **appended**; nothing of yours is touched.
+- **Re-install** → only the text between `<!-- BEGIN harness-governance -->` and
+  `<!-- END harness-governance -->` is replaced. Keep your own rules *outside*
+  the block and they survive every update. Running it twice never duplicates it.
 
 After install, **restart Claude Code** in your project so the new
 `.claude/settings.json` (permissions + hooks) takes effect.
