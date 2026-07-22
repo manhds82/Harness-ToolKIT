@@ -124,6 +124,9 @@ $receipt = [ordered]@{
     version      = $bundle.version
     content_hash = $bundle.content_hash
     installed_at = (Get-Date -Format 'o')
+    # Recorded so a maintainer can SEE which files this install treats as
+    # project-owned, instead of having to read the installer to find out.
+    preserve     = @($preserve)
     files        = @($manifestFiles)
 } | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText((Join-Path $receiptDir ".bundle-manifest.json"), $receipt, $Utf8NoBom)

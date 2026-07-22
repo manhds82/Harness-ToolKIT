@@ -82,6 +82,9 @@ import hashlib, datetime, json as _json
 receipt = {
     "name": b["name"], "version": b["version"], "content_hash": b["content_hash"],
     "installed_at": datetime.datetime.now().astimezone().isoformat(),
+    # Recorded so a maintainer can SEE which files this install treats as
+    # project-owned, instead of having to read the installer to find out.
+    "preserve": sorted(preserve),
     "files": [{"path": f["path"],
                "sha256": hashlib.sha256(base64.b64decode(f["b64"])).hexdigest()}
               for f in b["files"]],
