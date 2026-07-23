@@ -82,6 +82,34 @@ what is inside it. Run the installer with `-MergeGuides` / `--merge-guides`.
   high-risk actions as "needs server-side enforcement" rather than implying the
   local hook is a hard boundary.
 
+## Plane separation — what these policies do NOT govern
+
+The harness governs the **assistant plane**: the AI/CI workflow that *builds*
+this repo — which agents run, which models they plan/code/review with, which
+tools they may call, how a pipeline stage retries. It does **not** govern the
+**product plane**: whatever your shipped application does at runtime.
+
+This matters most where the two look alike. A policy pack declares model IDs
+under something like `orchestration.model_fallback`, which reads exactly like
+"the model fallback chain" — so in a repo whose *product* also calls LLMs,
+pointing the product's gateway at it looks like a sensible upgrade. It is an
+outage: an assistant-plane model ID sent to a different provider's endpoint
+fails every call, and it surfaces as a **bad key**, not a bad model name, so
+whoever debugs it goes hunting through credentials.
+
+Two rules follow:
+
+- Every policy layer states its plane in a machine-readable field
+  (`governs: assistant_workflow` or `governs: product_runtime`) — in a field,
+  not in a comment, so a check can assert it.
+- Product code neither hardcodes an assistant-plane model ID **nor reads the
+  harness config directory at all**. The second half is the one that matters:
+  it catches the runtime-lookup form, where the product loads the policy file
+  and pulls the chain out of it — which a grep for model IDs never sees.
+
+Your product's own model choices belong in your product's own config, per
+provider. policy-ci asserts the separation; keep the two apart on purpose.
+
 ## Model Reference (adjust to your licensed models)
 
 | Profile       | Fable 5    | Opus 4.8    | Sonnet 5    | Haiku 4.5   |

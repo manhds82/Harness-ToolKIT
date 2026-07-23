@@ -190,6 +190,16 @@ if (-not $giHas) {
     Write-Output "[scaffold] added portal-sync.key to .gitignore (C5)"
 }
 
+# The legacy-guide migration below writes a one-time '<file>.pre-migration.bak'.
+# That is a local safety net, not project content -- ignore it so it does not
+# show up as untracked noise in every project the migration touched.
+$bakLine = "*.pre-migration.bak"
+$bakHas = (Test-Path $giPath) -and (Select-String -Path $giPath -SimpleMatch $bakLine -Quiet)
+if (-not $bakHas) {
+    Add-Content -Path $giPath -Value "`n# One-time backup written when a legacy guide block is migrated`n$bakLine" -Encoding utf8
+    Write-Output "[scaffold] added *.pre-migration.bak to .gitignore"
+}
+
 # --- H1 scaffold: build the context pointer store so a freshly-onboarded project
 # satisfies its own context contract right away (the policy-ci suite asserts it,
 # and the release gate would otherwise block until the first session ran the

@@ -142,6 +142,14 @@ if ! grep -qF ".harness/portal-sync.key" "$GI" 2>/dev/null; then
   echo "[scaffold] added portal-sync.key to .gitignore (C5)"
 fi
 
+# The legacy-guide migration below writes a one-time '<file>.pre-migration.bak'.
+# That is a local safety net, not project content -- ignore it so it does not
+# show up as untracked noise in every project the migration touched.
+if ! grep -qF "*.pre-migration.bak" "$GI" 2>/dev/null; then
+  printf '\n# One-time backup written when a legacy guide block is migrated\n*.pre-migration.bak\n' >> "$GI"
+  echo "[scaffold] added *.pre-migration.bak to .gitignore"
+fi
+
 # --- H1 scaffold: build the context pointer store so a freshly-onboarded project
 # satisfies its own context contract right away (the policy-ci suite asserts it,
 # and the release gate would otherwise block until the first session ran the
