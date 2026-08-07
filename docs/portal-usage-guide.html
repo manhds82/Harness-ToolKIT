@@ -44,7 +44,7 @@
       <pre><code>POST https://portal.example.com/api/member/projects/{project_id}/proxy/chat
 { "provider_connection_id":"...", "model":"...", "messages":[{"role":"user","content":"hello"}] }</code></pre></li>
     <li><b>Thêm Member.</b> Add theo email → Portal sinh <b>invite link</b> (hoặc gửi email nếu bật SMTP) → member mở <code>https://member.example.com/accept-invite?token=...</code> đặt mật khẩu → chỉ thấy project được add, budget/provider (key mask).</li>
-    <li><b>Theo dõi.</b> Dashboard: cost/token theo member+provider, budgets, action log, security incidents, prompt scores, test reports (bấm ingest/scan/run để cập nhật từ checkout).</li>
+    <li><b>Theo dõi.</b> Per-project tabs: Dashboard (cost/token theo member+provider), Budgets, Action Log, Security, Prompt Score, Source/Doc, Test Report, <b>Bug List</b> (M6), <b>Harness Level</b> (CASAN H1–H7). Menu trái: <b>Approvals</b> (duyệt hành động rủi ro), <b>Common Bug</b> (bug tái diễn/quan trọng toàn tổ chức).</li>
   </ol>
 
   <h2>Phần 2 — Đưa một dự án đang chạy local vào quản lý</h2>
@@ -52,16 +52,22 @@
   <ol class="big">
     <li><b>Cài governance bundle vào repo dự án</b> (một lần):
       <pre><code># Windows
-powershell -File install.ps1 -BundleFile standard-governance-1.0.0.bundle.json -TargetDir C:\path\to\my-service
+powershell -File install.ps1 -BundleFile standard-governance-&lt;latest&gt;.bundle.json -TargetDir C:\path\to\my-service
 # macOS/Linux
-bash install.sh --bundle standard-governance-1.0.0.bundle.json --target /path/to/my-service</code></pre>
+bash install.sh --bundle standard-governance-&lt;latest&gt;.bundle.json --target /path/to/my-service</code></pre>
       Kiểm đã áp đúng: <code>harness-verify.ps1 -TargetDir C:\path\to\my-service</code> → <code>APPLIED OK</code>. Khởi động lại Claude Code trong repo để hook có hiệu lực.</li>
     <li><b>Đăng ký dự án trên Portal</b> (tab Settings của project): đặt
       <ul>
         <li><code>harness_root_ref</code> = đường dẫn checkout thật của dự án (để Portal ingest log/telemetry của nó).</li>
         <li><code>gateway_base_url</code> = URL gateway phục vụ checkout đó (nếu dùng đồng bộ qua gateway).</li>
       </ul></li>
-    <li><b>Ingest lịch sử vào Portal.</b> Bấm <b>Run ingest/scan/run</b> ở các tab → Portal đọc <code>.harness/ledger/chain.jsonl</code> + <code>.harness/telemetry/*</code> của repo → hiển thị: action log, security incidents (prompt bị chặn/vi phạm), prompt scores, source↔doc mapping, test report.</li>
+    <li><b>Đồng bộ telemetry — 2 cách:</b>
+      <ul>
+        <li><b>Server đọc trực tiếp</b> (repo nằm cùng máy Portal): bấm <b>Run ingest/scan/run</b> ở các tab → Portal đọc <code>.harness/</code> của checkout tại <code>harness_root_ref</code>.</li>
+        <li><b>Push từ máy dev</b> (repo ở máy khác — phổ biến nhất): điền <code>.harness/portal-sync.json</code> <code>{portal_url, project_id, member_email, pdp_enforce}</code> + dán ingest key vào <code>.harness/portal-sync.key</code> (Settings → Reveal ingest key), rồi chạy <code>push-telemetry.ps1</code> (tự chạy lúc SessionEnd, hoặc scheduled task 15 phút). <b>member_email</b> = account chạy AI → gán token đúng member + provider connection.</li>
+      </ul>
+      Cả hai đường đưa lên: action log, security incidents (prompt bị chặn/vi phạm), <b>prompt scores</b> (review verdict), <b>source↔doc mapping</b> (H1), <b>test reports</b> (H3), và <b>bug list</b> (M6).</li>
+    <li><b>Bật chặn server-side (tuỳ chọn).</b> Đặt <code>pdp_enforce:true</code> trong <code>portal-sync.json</code> → hook PreToolUse hỏi Portal PDP: chặn outbound ngoài allowlist (H4), giữ deploy/DB-write chờ admin duyệt ở tab <b>Approvals</b> (H5), chặn release nếu test/verdict fail (H3). Fail-open (defense-in-depth, C10).</li>
     <li><b>Gán budget + connect provider</b> cho project (như Phần 1) nếu muốn đo/chặn chi phí.</li>
     <li><b>Lặp cho từng dự án local khác.</b> Mỗi dự án = 1 project trong Portal; bạn quản lý tập trung nhiều dự án cùng lúc, mỗi cái vẫn chạy độc lập trên máy.</li>
   </ol>
@@ -74,7 +80,10 @@ bash install.sh --bundle standard-governance-1.0.0.bundle.json --target /path/to
     <tr><td>Kiểm dự án đã áp harness đúng chưa</td><td><code>harness-verify</code> (local) → APPLIED OK</td></tr>
     <tr><td>Đo/chặn token &amp; chi phí</td><td>Portal: Budget + Provider (Tier-1) + proxy</td></tr>
     <tr><td>Xem prompt bị chặn / vi phạm / làm-lại</td><td>Portal: Security / Action Log (ingest từ repo)</td></tr>
-    <tr><td>Xem bug/findings AI phát hiện</td><td>Portal: dashboard findings <span class="tag t-amber">roadmap</span></td></tr>
+    <tr><td>Xem bug AI phát hiện / tự gây</td><td>Portal: tab <b>Bug List</b> mỗi project (từ <code>buglist.md</code>)</td></tr>
+    <tr><td>Bug tái diễn/quan trọng nhiều dự án</td><td>Portal: menu <b>Common Bug</b> (nội dung/nguyên nhân/fix/gợi ý)</td></tr>
+    <tr><td>Gán token đúng account</td><td><code>member_email</code> trong portal-sync.json</td></tr>
+    <tr><td>Duyệt deploy / hành động rủi ro</td><td>Portal: tab <b>Approvals</b> (khi <code>pdp_enforce:true</code>)</td></tr>
     <tr><td>Chặn lệnh nguy hiểm khi code</td><td>Hook trong repo (tự động, sau install)</td></tr>
   </table>
 

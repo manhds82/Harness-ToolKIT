@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
   Thiet lap dong bo telemetry len Control Portal cho MOT project (ket hop:

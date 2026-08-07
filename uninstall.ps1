@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
   Harness Bundle uninstaller (L5). Removes exactly the files a bundle installed

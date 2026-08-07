@@ -12,13 +12,16 @@
 #                   sentinel if present but not yet merged; skips if sentinel found.
 set -euo pipefail
 
-BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0
+BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0; DRY_RUN=0
 PROJECT_NAME=""; PROJECT_DESC=""; FORCE_IDENTITY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle)       BUNDLE="$2"; shift 2;;
     --target)       TARGET="$2"; shift 2;;
     --force)        FORCE=1; shift;;
+    # Show what an install WOULD do and write nothing. Every consuming team asked
+    # for this: they wanted the blast radius before committing to it.
+    --dry-run)      DRY_RUN=1; shift;;
     # --merge-claude is the old name; both project the governance text into every
     # guide file listed in casan-policies governance.guide_targets.
     --merge-guides|--merge-claude) MERGE_CLAUDE=1; shift;;
@@ -41,9 +44,16 @@ PY="$(command -v python3 || command -v python || true)"
 # Did the project already have its own settings.json? (so we don't clobber it)
 PRE_SETTINGS=0; [[ -f "$TARGET/.claude/settings.json" ]] && PRE_SETTINGS=1
 
-"$PY" - "$BUNDLE" "$TARGET" "$FORCE" <<'PY'
-import json, base64, hashlib, os, sys
+# The installer's own copy of the ownership rules (see the union note inside the
+# python block). Resolved relative to this script; absent for a standalone copy
+# of the installer, which the python side treats as "bundle rules only".
+OWN_RULES="$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd || true)/.harness/control/bundle-ownership.yaml"
+
+"$PY" - "$BUNDLE" "$TARGET" "$FORCE" "$DRY_RUN" "$OWN_RULES" <<'PY'
+import json, base64, hashlib, os, re, sys, fnmatch
 bundle_path, target, force = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+dry_run = len(sys.argv) > 4 and sys.argv[4] == "1"
+own_rules_path = sys.argv[5] if len(sys.argv) > 5 else ""
 b = json.load(open(bundle_path, encoding="utf-8"))
 # Fail-closed integrity: recompute hash over sorted path:b64 pairs.
 hi = "\n".join("%s:%s" % (f["path"], f["b64"]) for f in b["files"])
@@ -51,31 +61,327 @@ comp = hashlib.sha256(hi.encode("utf-8")).hexdigest()
 if comp != b["content_hash"]:
     sys.exit("Bundle integrity check FAILED: computed %s != declared %s" % (comp, b["content_hash"]))
 print("[install] %s v%s (%d files) -> %s" % (b["name"], b["version"], b["file_count"], target))
-written = skipped = kept = 0
+written = skipped = kept = merged = 0
+merges = []
 # Files the project OWNS once they exist: never overwritten, not even with
 # --force, because they carry per-project decisions. When the shipped copy has
 # moved on, a `<file>.new` is dropped beside it to adopt new keys deliberately.
 preserve = set(b.get("preserve") or [])
+conflicts = []
+
+def parse_ownership(text):
+    """Shared by the payload parse and the installer-side fallback below.
+    Returns the four rule collections and prints nothing -- the caller decides."""
+    owned, globs, keyed, mergem = [], [], {}, {}
+    section = ""
+    for line in text.splitlines():
+        m = re.match(r"^([a-z_]+):\s*$", line)
+        if m:
+            section = m.group(1); continue
+        if re.match(r"^[a-z_]+:", line):
+            section = ""; continue
+        m = re.match(r'^\s+-\s*"?([^"]+?)"?\s*$', line)
+        if m and section == "project_owned":
+            owned.append(m.group(1))
+        elif m and section == "project_owned_globs":
+            globs.append(m.group(1))
+        m = re.match(r'^\s+"([^"]+)":\s*"([^"]+)"', line)
+        if m and section == "keyed_lists":
+            keyed[m.group(1)] = m.group(2)
+        elif m and section == "merge_json_maps":
+            mergem[m.group(1)] = m.group(2)
+    return owned, globs, keyed, mergem
+
+
+# Ownership rules (C2) read from the bundle's OWN payload, so the rules governing
+# this install are the ones this bundle shipped -- not whatever an older copy left
+# on disk. Absent = fall back to `preserve` alone, i.e. previous behaviour exactly.
+own_globs, keyed_lists, merge_maps = [], {}, {}
+_own = next((f for f in b["files"] if f["path"] == ".harness/control/bundle-ownership.yaml"), None)
+if _own:
+    try:
+        o, g, kl, mm = parse_ownership(base64.b64decode(_own["b64"]).decode("utf-8"))
+        preserve.update(o); own_globs.extend(g)
+        keyed_lists.update(kl); merge_maps.update(mm)
+    except Exception as e:
+        print("[own] WARNING: bundle-ownership.yaml unreadable (%s); falling back to preserve list only" % e)
+
+# A bundle packed before a rule existed must not reopen the loss that rule
+# prevents: v1.6.0 ships no merge_json_maps, so governed by its payload alone it
+# would still overwrite tool-registry.json -- the exact defect. So the rules
+# that travel BESIDE this installer (../../.harness/control/, in this repo and
+# in an installed project alike) are unioned in. A union can only protect more
+# than the bundle asked, never less, and the bundle stays authoritative wherever
+# both copies define the same path, so a future bundle can still re-scope a rule
+# on purpose. No file there is the standalone-installer case and means "bundle
+# rules only" -- the previous behaviour, silently.
+if own_rules_path and os.path.isfile(own_rules_path):
+    try:
+        o, g, kl, mm = parse_ownership(open(own_rules_path, encoding="utf-8-sig").read())
+        newer = []
+        for p in o:
+            if p not in preserve:
+                preserve.add(p); newer.append("project_owned:%s" % p)
+        for gg in g:
+            if gg not in own_globs:
+                own_globs.append(gg); newer.append("project_owned_globs:%s" % gg)
+        for k in sorted(kl):
+            if k not in keyed_lists:
+                keyed_lists[k] = kl[k]; newer.append("keyed_lists:%s" % k)
+        for k in sorted(mm):
+            if k not in merge_maps:
+                merge_maps[k] = mm[k]; newer.append("merge_json_maps:%s" % k)
+        if newer:
+            print("[own] this bundle predates %d ownership rule(s); applied from the installer's copy: %s"
+                  % (len(newer), ", ".join(newer)))
+    except Exception as e:
+        print("[own] WARNING: installer-side bundle-ownership.yaml unreadable (%s); using the bundle's own rules only" % e)
+
+# The PREVIOUS install's receipt already records a sha256 per shipped file.
+# Comparing it to disk answers what `preserve` never could: did the project
+# hand-edit a file the bundle owns? Overwriting that silently is how four
+# separate teams lost work.
+prev_hashes = {}
+_pr = os.path.join(target, ".harness", ".bundle-manifest.json")
+if os.path.exists(_pr):
+    try:
+        # Prefer installed_sha256 -- what the LAST install left on disk. Fall back
+        # to sha256 (shipped bytes) only for receipts written before that field
+        # existed, where it is the best baseline available.
+        for e in (json.load(open(_pr, encoding="utf-8")).get("files") or []):
+            if e.get("path"):
+                prev_hashes[e["path"]] = e.get("installed_sha256") or e.get("sha256") or ""
+    except Exception:
+        pass          # unreadable receipt just means "no baseline" -- never fatal
+
+
+def owned_glob(path):
+    # Match full relative path AND bare filename, so "project-*" / "*.local.*"
+    # apply at any depth without the rule author spelling out a prefix.
+    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch(os.path.basename(path), g)
+               for g in own_globs)
+
+
+def merge_json_map(disk_bytes, ship_bytes, map_key):
+    """Field-level merge of a JSON object map (bundle-ownership merge_json_maps).
+
+    Returns (ok, reason, text, stats). Writes nothing and prints nothing -- the
+    caller decides -- so a status line can never end up inside the file.
+    install.ps1 emits the identical bytes: json.dumps(indent=2,
+    ensure_ascii=False) is the canonical form both installers agree on, because
+    the merged file gets hashed into the receipt and two spellings of the same
+    content would make the other installer report a hand-edit that never was.
+    """
+    try:
+        disk = json.loads(disk_bytes.decode("utf-8"))
+        if not isinstance(disk, dict):
+            raise ValueError("not an object")
+    except Exception:
+        return (False, "could not parse your copy as JSON", None, None)
+    try:
+        ship = json.loads(ship_bytes.decode("utf-8"))
+        if not isinstance(ship, dict):
+            raise ValueError("not an object")
+    except Exception:
+        return (False, "could not parse the shipped copy as JSON", None, None)
+    if not isinstance(ship.get(map_key), dict):
+        return (False, "the shipped copy has no '%s' object" % map_key, None, None)
+
+    ship_map = ship[map_key]
+    disk_map = disk.get(map_key) if isinstance(disk.get(map_key), dict) else None
+    st = {"added": [], "updated": 0, "yours": [], "overrides": [],
+          "fields": 0, "entries": 0, "extra_top": []}
+
+    out_map = {}
+    for name, ship_entry in ship_map.items():
+        if disk_map is None or name not in disk_map:
+            out_map[name] = ship_entry
+            st["added"].append(name)
+            continue
+        disk_entry = disk_map[name]
+        if not isinstance(ship_entry, dict) or not isinstance(disk_entry, dict):
+            # Not an object on one side -- nothing to merge field-wise, bundle wins.
+            out_map[name] = ship_entry
+            st["updated"] += 1
+            continue
+        entry = dict(ship_entry)
+        kept_fields = 0
+        for k, v in disk_entry.items():
+            if k not in ship_entry:
+                # The whole point: a field the bundle has no opinion about.
+                entry[k] = v
+                kept_fields += 1
+            elif v != ship_entry[k]:
+                st["overrides"].append("%s.%s" % (name, k))
+        if kept_fields:
+            st["fields"] += kept_fields
+            st["entries"] += 1
+        out_map[name] = entry
+        st["updated"] += 1
+    if disk_map is not None:
+        for name, v in disk_map.items():
+            if name not in ship_map:
+                out_map[name] = v
+                st["yours"].append(name)
+
+    # Top level: the bundle owns its own keys (schema_version, generated_at...),
+    # anything the project added beside them is theirs and rides along.
+    root = {}
+    for k, v in ship.items():
+        root[k] = out_map if k == map_key else v
+    for k, v in disk.items():
+        if k not in ship:
+            root[k] = v
+            st["extra_top"].append(k)
+    return (True, "", json.dumps(root, indent=2, ensure_ascii=False) + "\n", st)
+
+
+def list_keys(text, list_key, item_key):
+    """Item keys of a keyed YAML list, by line scan -- only has to recognize the
+    shape the bundle itself ships: `<list>:` then `  - <key>: value`."""
+    keys, in_list = [], False
+    for line in text.splitlines():
+        if re.match(r"^%s:\s*$" % re.escape(list_key), line):
+            in_list = True; continue
+        if in_list and re.match(r"^[A-Za-z0-9_]+:", line):
+            in_list = False; continue
+        if in_list:
+            m = re.match(r'^\s+-\s+%s:\s*"?([^"#]+?)"?\s*$' % re.escape(item_key), line)
+            if m:
+                keys.append(m.group(1).strip())
+    return keys
+
+
 for f in b["files"]:
     dest = os.path.join(target, *f["path"].split("/"))
     data = base64.b64decode(f["b64"])
-    if os.path.exists(dest) and f["path"] in preserve:
+    exists = os.path.exists(dest)
+
+    # 1) Project-owned, by exact path or convention glob.
+    if exists and (f["path"] in preserve or owned_glob(f["path"])):
         with open(dest, "rb") as fh:
             same = fh.read() == data
         if same:
             print("  [KEEP]  %s (yours; identical to shipped)" % f["path"])
         else:
-            with open(dest + ".new", "wb") as fh:
-                fh.write(data)
+            if not dry_run:
+                with open(dest + ".new", "wb") as fh:
+                    fh.write(data)
             print("  [KEEP]  %s (yours; shipped copy saved as %s.new)" % (f["path"], f["path"]))
         kept += 1
         continue
-    if os.path.exists(dest) and not force:
-        print("  [SKIP] %s (exists; use --force to overwrite)" % f["path"]); skipped += 1; continue
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "wb") as fh:
-        fh.write(data)
+
+    if exists:
+        with open(dest, "rb") as fh:
+            disk = fh.read()
+        disk_hash = hashlib.sha256(disk).hexdigest()
+
+        # 2) A JSON object map the project may have EXTENDED -- extra FIELDS on
+        # entries the bundle ships, and/or entries of its own. Overwriting the
+        # whole file is what erased one project's contract/timeout annotations
+        # across all 62 registry tools (see merge_json_maps in
+        # bundle-ownership.yaml). Merge per entry, per field instead.
+        # Runs with or WITHOUT --force on purpose: the merge cannot lose a field
+        # the bundle does not ship, and gating it behind --force would leave a
+        # plain install with a registry that never learns about new tools --
+        # which C3 turns into "unknown tool, denied by default" at run time.
+        if f["path"] in merge_maps:
+            mk = merge_maps[f["path"]]
+            ok, reason, text, st = merge_json_map(disk, data, mk)
+            if ok:
+                if not dry_run:
+                    with open(dest, "w", encoding="utf-8", newline="\n") as fh:
+                        fh.write(text)
+                print("  [MERGE] %s (%s: %d added, %d updated, %d yours kept; %d project field(s) preserved on %d entry(ies))"
+                      % (f["path"], mk, len(st["added"]), st["updated"], len(st["yours"]),
+                         st["fields"], st["entries"]))
+                if st["yours"]:
+                    print("             kept yours: %s" % ", ".join(st["yours"]))
+                if st["added"]:
+                    print("             added by the bundle: %s" % ", ".join(st["added"]))
+                if st["extra_top"]:
+                    print("             kept your extra top-level key(s): %s" % ", ".join(st["extra_top"]))
+                # Never silent: these are the only edits of theirs that did NOT
+                # survive, so name every one (C10).
+                if st["overrides"]:
+                    print("             bundle value wins on %d field(s) you had changed: %s"
+                          % (len(st["overrides"]), ", ".join(st["overrides"])))
+                merges.append("%s: %d project field(s) on %d entry(ies), %d project-only entry(ies) kept"
+                              % (f["path"], st["fields"], st["entries"], len(st["yours"])))
+                merged += 1
+                continue
+            # Unparseable on either side, or the shipped copy lost the map: never
+            # write a half-merged governance file. Say so and keep theirs.
+            if not dry_run:
+                with open(dest + ".new", "wb") as fh:
+                    fh.write(data)
+            msg = "%s: %s -- not merged" % (f["path"], reason)
+            print("  [CONFLICT] %s" % msg)
+            print("             kept yours; shipped copy is %s.new" % f["path"])
+            conflicts.append(msg); kept += 1
+            continue
+
+        # 3) A keyed list the project may have EXTENDED. Overwriting is right for
+        # the shipped entries and destructive for the project's own, so when the
+        # project has entries the bundle does not ship, stop and name them.
+        # Deliberately a conflict, not an auto-merge: guessing where to splice a
+        # YAML item risks a broken pipeline that still validates (C10).
+        if f["path"] in keyed_lists:
+            lk, ik = keyed_lists[f["path"]].split(":", 1)
+            try:
+                mine = list_keys(disk.decode("utf-8"), lk, ik)
+                ship = list_keys(data.decode("utf-8"), lk, ik)
+            except UnicodeDecodeError:
+                mine = ship = []
+            extra = [k for k in mine if k not in ship]
+            if extra:
+                if not dry_run:
+                    with open(dest + ".new", "wb") as fh:
+                        fh.write(data)
+                msg = ("%s: your %s has %d entry(ies) the bundle does not ship -- %s"
+                       % (f["path"], lk, len(extra), ", ".join(extra)))
+                print("  [CONFLICT] %s" % msg)
+                print("             kept yours; shipped copy is %s.new -- carry those entries over by hand" % f["path"])
+                conflicts.append(msg); kept += 1
+                continue
+
+        # 4) A bundle-owned file the project hand-edited since the last install.
+        # Only claimable when a baseline exists; with no receipt we cannot tell an
+        # edit from a first install, and guessing would cry wolf or hide it.
+        if prev_hashes.get(f["path"]) and disk_hash != prev_hashes[f["path"]]:
+            if not dry_run:
+                with open(dest + ".new", "wb") as fh:
+                    fh.write(data)
+            msg = "%s: edited by hand since the last install (sha differs from the recorded baseline)" % f["path"]
+            print("  [CONFLICT] %s" % msg)
+            print("             kept yours; shipped copy is %s.new" % f["path"])
+            conflicts.append(msg); kept += 1
+            continue
+
+        if not force:
+            print("  [SKIP] %s (exists; use --force to overwrite)" % f["path"]); skipped += 1; continue
+
+    if not dry_run:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "wb") as fh:
+            fh.write(data)
     print("  [WRITE] %s" % f["path"]); written += 1
+
+# Conflicts are listed again by NAME: a count alone reads as "all fine", and the
+# whole point of this pass is that some files were deliberately NOT updated.
+print("")
+print("[summary] written=%d  merged=%d  kept=%d  skipped=%d  conflicted=%d" % (written, merged, kept, skipped, len(conflicts)))
+if merges:
+    print("[summary] merged in place -- your fields survived:")
+    for m in merges:
+        print("  - %s" % m)
+if conflicts:
+    print("[summary] NOT updated -- resolve these by hand:")
+    for c in conflicts:
+        print("  - %s" % c)
+if dry_run:
+    print("[summary] DRY RUN -- nothing was written. Re-run without --dry-run to apply.")
+    raise SystemExit(0)
 
 # Install receipt for the in-project uninstaller (path + original sha256).
 import hashlib, datetime, json as _json
@@ -92,8 +398,17 @@ receipt = {
 rdir = os.path.join(target, ".harness"); os.makedirs(rdir, exist_ok=True)
 with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as fh:
     _json.dump(receipt, fh, indent=2)
-print("[install] done: %d written, %d skipped, %d kept (project-owned). Integrity OK (%s)." % (written, skipped, kept, b["content_hash"]))
+print("[install] done: %d written, %d merged, %d skipped, %d kept (project-owned). Integrity OK (%s)." % (written, merged, skipped, kept, b["content_hash"]))
 PY
+
+# A dry run has to stop HERE. Everything below scaffolds real files -- portal-sync
+# stubs, buglist.md, the context store, project identity, guide merging -- so
+# letting it continue would make --dry-run write exactly the things the flag
+# exists to avoid, which is worse than not having the flag.
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "[install] dry run complete -- no scaffolding, identity or guide changes were applied."
+  exit 0
+fi
 
 # --- Portal-sync scaffold: create the two files a newcomer would otherwise have
 # to hand-author, at the right location, ready to edit. NEVER overwrite existing
@@ -132,6 +447,47 @@ if [[ ! -f "$BUG_FILE" && -f "$BUG_TMPL" ]]; then
   echo "[scaffold] created buglist.md (log every bug here -- see rule in the file)"
 elif [[ -f "$BUG_FILE" ]]; then
   echo "[scaffold] buglist.md already exists -> kept"
+fi
+
+# --- Agent Pack scaffold (v1.6.0, parity with install.ps1): auto-generate
+# agent-config.yaml by detecting the stack, so review->fix->test works from day
+# one. Never overwrite (project-owned). Stack undetected -> write the annotated
+# sample so a human fills it in rather than a wrong command failing silently.
+AC_FILE="$TARGET/.harness/control/agent-config.yaml"
+AC_SAMPLE="$TARGET/.harness/templates/agent-pack/agent-config.yaml.sample"
+if [[ ! -f "$AC_FILE" && -f "$AC_SAMPLE" ]]; then
+  unit=""; full=""; detected=""
+  if [[ -f "$TARGET/package.json" ]]; then
+    if grep -q '"vitest"' "$TARGET/package.json"; then unit="npx vitest related --run {files}"; full="npx vitest run"; detected="vitest"
+    elif grep -q '"jest"' "$TARGET/package.json"; then unit="npx jest --findRelatedTests {files}"; full="npx jest"; detected="jest"; fi
+  fi
+  if [[ -z "$detected" && ( -f "$TARGET/pyproject.toml" || -f "$TARGET/pytest.ini" ) ]]; then
+    unit="pytest --testmon -q"; full="pytest -q"; detected="pytest"; fi
+  if [[ -z "$detected" && -f "$TARGET/composer.json" ]]; then
+    unit="php artisan test --filter {files}"; full="php artisan test"; detected="phpunit"; fi
+  if [[ -n "$detected" ]]; then
+    cat > "$AC_FILE" <<YAML
+# Agent Pack project config -- AUTO-GENERATED by installer (detected: $detected).
+# Tune to taste. Project-owned: re-install never overwrites this.
+# Schema: .harness/schemas/agent-config.schema.json
+test:
+  unit_related_cmd: "$unit"
+  full_suite_cmd:   "$full"
+  integration_smoke: []
+impact:
+  force_full_test_on:
+    - "**/migrations/**"
+    - "**/schema.*"
+    - "**/middleware.*"
+    - "package-lock.json"
+    - "composer.lock"
+    - "poetry.lock"
+YAML
+    echo "[scaffold] agent-config.yaml generated (detected $detected test runner)"
+  else
+    cp "$AC_SAMPLE" "$AC_FILE"
+    echo "[scaffold] agent-config.yaml: stack not detected -> wrote sample to fill in"
+  fi
 fi
 
 # C5: never commit the ingest key. Ensure the target project's .gitignore
@@ -291,3 +647,33 @@ if [[ -f "$POSIX" && ( "$PRE_SETTINGS" -eq 0 || "$FORCE" -eq 1 ) ]]; then
   echo "[install] selected POSIX (bash) hooks for .claude/settings.json"
 fi
 
+
+# --- Re-stamp the receipt with what this install actually LEFT ON DISK ---------
+# The baseline for "did the project hand-edit a bundle-owned file?" must be the
+# state the installer finished in, not the bytes the bundle shipped. Steps above
+# deliberately modify files after writing them -- the guide merge appends a managed
+# block, settings.posix.json is copied over settings.json, identity is stamped --
+# so comparing against the shipped hash flagged .claude/settings.json as
+# hand-edited on the very next run. That false positive would train a maintainer to
+# ignore conflict reports, which costs more than having no detection at all.
+#
+# `sha256` keeps its original meaning (the shipped bytes) because the uninstaller
+# uses it to tell a pristine file from a user-edited one; `installed_sha256` is
+# added alongside, and the tamper check prefers it when present.
+"$PY" - "$TARGET" <<'PY' || echo "[receipt] WARNING: could not re-stamp installed hashes; next run may report false conflicts"
+import hashlib, json, os, sys
+target = sys.argv[1]
+p = os.path.join(target, ".harness", ".bundle-manifest.json")
+if not os.path.exists(p):
+    raise SystemExit(0)
+r = json.load(open(p, encoding="utf-8"))
+for e in (r.get("files") or []):
+    fp = os.path.join(target, *e["path"].split("/"))
+    ih = ""
+    if os.path.exists(fp):
+        with open(fp, "rb") as fh:
+            ih = hashlib.sha256(fh.read()).hexdigest()
+    e["installed_sha256"] = ih
+with open(p, "w", encoding="utf-8") as fh:
+    json.dump(r, fh, indent=2)
+PY
