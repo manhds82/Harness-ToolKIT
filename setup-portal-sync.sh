@@ -32,6 +32,17 @@ done
 [ -d "$PROJECT_DIR" ] || { echo "Khong tim thay project dir: $PROJECT_DIR" >&2; exit 1; }
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
+# PORTAL_URL giu placeholder chung vi script nay ship ra ban public -- no khong
+# duoc mang URL noi bo. Nhung neu operator quen --portal-url thi truoc day script
+# van GHI placeholder do vao portal-sync.json va bao thanh cong; loi chi lo ra o
+# buoc push, duoi dang mot loi DNS khong lien quan den buoc cai dat. Dung han o
+# day. Phai khop voi kiem tra cung ten trong setup-portal-sync.ps1 (C7).
+case "$PORTAL_URL" in
+    *YOUR-PORTAL-DOMAIN*)
+        echo "Chua dat --portal-url. Truyen URL Portal that, vi du: --portal-url https://portal.example.com" >&2
+        exit 1 ;;
+esac
+
 echo "=================================================================="
 echo " Portal sync setup -> $PROJECT_DIR"
 echo "=================================================================="
@@ -39,16 +50,21 @@ echo "=================================================================="
 # 1. Cai bundle
 if [ "$SKIP_INSTALL" -eq 0 ]; then
     if [ -z "$BUNDLE_FILE" ]; then
-        # Tim bundle o ca 2 layout: repo goc va repo phan phoi phang.
-        for c in \
-            "$REPO_ROOT/bundles/standard-governance/standard-governance-1.2.0.bundle.json" \
-            "$TOOL_DIR/standard-governance-1.2.0.bundle.json"; do
-            [ -f "$c" ] && BUNDLE_FILE="$c" && break
-        done
-        [ -n "$BUNDLE_FILE" ] || BUNDLE_FILE="$(find "$TOOL_DIR" "$REPO_ROOT" -name '*.bundle.json' 2>/dev/null | head -1)"
+        # Chon theo SO VERSION cao nhat, khong phai ten dich danh.
+        #
+        # Truoc day cho nay uu tien standard-governance-1.2.0.bundle.json va file
+        # do van nam trong repo, nen moi du an onboard MOI deu nhan ban 1.2.0 --
+        # cach ban hien tai 47 phien ban, thieu toan bo cac ban va guard, va
+        # khong co gi bao loi vi install van chay xanh. Nhanh du phong cu dung
+        # `find | head -1`, tuc thu tu tuy he thong file tra ve.
+        # `sort -V` sap theo version (1.6.19 > 1.6.9), khac han sort chuoi.
+        BUNDLE_FILE="$(ls "$REPO_ROOT/bundles/standard-governance"/standard-governance-*.bundle.json \
+                          "$TOOL_DIR"/standard-governance-*.bundle.json 2>/dev/null |
+                       sed 's#.*/standard-governance-\([0-9.]*\)\.bundle\.json#\1 &#' |
+                       sort -V -k1,1 | tail -1 | cut -d' ' -f2-)"
     fi
     [ -n "$BUNDLE_FILE" ] && [ -f "$BUNDLE_FILE" ] || { echo "Khong tim thay bundle .bundle.json" >&2; exit 1; }
-    echo "[1/3] Cai bundle v1.2.0 (hooks) vao project..."
+    echo "[1/3] Cai bundle $(basename "$BUNDLE_FILE") vao project..."
     bash "$TOOL_DIR/install.sh" --bundle "$BUNDLE_FILE" --target "$PROJECT_DIR" --force --merge-claude
 else
     echo "[1/3] (bo qua cai bundle)"

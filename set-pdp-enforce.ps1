@@ -21,6 +21,14 @@
 param(
     [string]$BaseDir = "E:\SourceCode",
     [bool]$Enforce = $true,
+    # -Only / -Exclude, comma-separated, same shape as set-member-email.ps1.
+    # Without them this script changed EVERY project, which is a blunt tool for
+    # "turn it on for the one project I just onboarded".
+    # A nested repo matches on either its own folder name or its path relative
+    # to BaseDir ("<product>/repos/<repo>"); naming the container selects all
+    # the repos under it.
+    [string]$Only = "",
+    [string]$Exclude = "",
     [switch]$WhatIf
 )
 
@@ -35,13 +43,21 @@ Write-Host "==================================================================" 
 Write-Host " Set pdp_enforce = $Enforce   (base: $BaseDir)$(if ($WhatIf) { '   [DRY RUN]' })" -ForegroundColor Green
 Write-Host "==================================================================" -ForegroundColor Green
 
-$projects = Get-ChildItem $BaseDir -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -notin $skip -and (Test-Path (Join-Path $_.FullName ".harness\portal-sync.json")) }
+. (Join-Path $PSScriptRoot "lib-discover-projects.ps1")
+$onlySet = @($Only    -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$exclSet = @($Exclude -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($onlySet) { Write-Host " Only:    $($onlySet -join ', ')" -ForegroundColor Green }
+if ($exclSet) { Write-Host " Exclude: $($exclSet -join ', ')" -ForegroundColor Green }
+
+$projects = Get-HarnessProjects -BaseDir $BaseDir -Marker ".harness\portal-sync.json" -Skip $skip
 
 if (-not $projects) { Write-Warning "No project with .harness\portal-sync.json under $BaseDir"; exit 0 }
 
 $summary = @()
 foreach ($p in $projects) {
+    $label = Get-ProjectLabel -Project $p -BaseDir $BaseDir
+    if ($onlySet -and -not (Test-ProjectMatch -Label $label -Name $p.Name -Set $onlySet)) { continue }
+    if ($exclSet -and (Test-ProjectMatch -Label $label -Name $p.Name -Set $exclSet)) { continue }
     $f = Join-Path $p.FullName ".harness\portal-sync.json"
     try {
         $cfg = Get-Content $f -Raw -Encoding utf8 | ConvertFrom-Json

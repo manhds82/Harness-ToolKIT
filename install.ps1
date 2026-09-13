@@ -36,7 +36,11 @@ param(
     # Show exactly what an install WOULD do -- per file: WRITE / KEEP / SKIP /
     # MERGE-CONFLICT -- and write nothing. Every consuming team asked for this:
     # they wanted to see the blast radius before committing to it.
-    [switch]$DryRun = $false
+    [switch]$DryRun = $false,
+    # Copy the shipped CI templates into .github/. Opt-in: dropping workflow
+    # files into a repo changes what runs on every push, which is not something
+    # an install should do behind the operator's back.
+    [switch]$WithCiGates = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,7 +93,7 @@ if ($bundle.PSObject.Properties.Name -contains 'preserve' -and $bundle.preserve)
 # four rule collections and prints nothing -- a Write-Output in here would join
 # the return value (the push-telemetry.ps1 lesson).
 function Read-OwnershipRules([string]$Text) {
-    $r = @{ Owned = @(); Globs = @(); Keyed = @{}; Merge = @{} }
+    $r = @{ Owned = @(); Globs = @(); Keyed = @{}; Merge = @{}; Hook = @{} }
     $section = ''
     foreach ($line in ($Text -split "`r?`n")) {
         if ($line -match '^([a-z_]+):\s*$') { $section = $matches[1]; continue }
@@ -98,6 +102,7 @@ function Read-OwnershipRules([string]$Text) {
         if ($section -eq 'project_owned_globs' -and $line -match '^\s+-\s*"?([^"]+?)"?\s*$') { $r.Globs += $matches[1] }
         if ($section -eq 'keyed_lists' -and $line -match '^\s+"([^"]+)":\s*"([^"]+)"') { $r.Keyed[$matches[1]] = $matches[2] }
         if ($section -eq 'merge_json_maps' -and $line -match '^\s+"([^"]+)":\s*"([^"]+)"') { $r.Merge[$matches[1]] = $matches[2] }
+        if ($section -eq 'merge_hook_settings' -and $line -match '^\s+"([^"]+)":\s*"([^"]+)"') { $r.Hook[$matches[1]] = $matches[2] }
     }
     return $r
 }
@@ -106,13 +111,13 @@ function Read-OwnershipRules([string]$Text) {
 # written, so the rules that govern this install are the ones this bundle shipped
 # -- not whatever an older copy left on disk. Absent file = fall back to
 # bundle.yaml's `preserve` alone, i.e. exactly the previous behaviour.
-$ownGlobs = @(); $keyedLists = @{}; $mergeMaps = @{}
+$ownGlobs = @(); $keyedLists = @{}; $mergeMaps = @{}; $hookSettings = @{}
 $ownEntry = $bundle.files | Where-Object { $_.path -eq '.harness/control/bundle-ownership.yaml' } | Select-Object -First 1
 if ($ownEntry) {
     try {
         $rules = Read-OwnershipRules ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ownEntry.b64)))
         $preserve += $rules.Owned; $ownGlobs += $rules.Globs
-        $keyedLists = $rules.Keyed; $mergeMaps = $rules.Merge
+        $keyedLists = $rules.Keyed; $mergeMaps = $rules.Merge; $hookSettings = $rules.Hook
         $preserve = @($preserve | Select-Object -Unique)
     } catch {
         Write-Output "[own] WARNING: bundle-ownership.yaml unreadable ($($_.Exception.Message)); falling back to preserve list only"
@@ -138,6 +143,7 @@ if ($installerRules -and (Test-Path $installerRules)) {
         foreach ($g in $mine.Globs) { if ($ownGlobs -notcontains $g) { $ownGlobs += $g; $newer += "project_owned_globs:$g" } }
         foreach ($k in (@($mine.Keyed.Keys) | Sort-Object)) { if (-not $keyedLists.ContainsKey($k)) { $keyedLists[$k] = $mine.Keyed[$k]; $newer += "keyed_lists:$k" } }
         foreach ($k in (@($mine.Merge.Keys) | Sort-Object)) { if (-not $mergeMaps.ContainsKey($k)) { $mergeMaps[$k] = $mine.Merge[$k]; $newer += "merge_json_maps:$k" } }
+        foreach ($k in (@($mine.Hook.Keys) | Sort-Object)) { if (-not $hookSettings.ContainsKey($k)) { $hookSettings[$k] = $mine.Hook[$k]; $newer += "merge_hook_settings:$k" } }
         if ($newer.Count -gt 0) {
             Write-Output "[own] this bundle predates $($newer.Count) ownership rule(s); applied from the installer's copy: $($newer -join ', ')"
         }
@@ -165,6 +171,53 @@ if (Test-Path $prevReceipt) {
             }
         }
     } catch { }   # unreadable receipt just means "no baseline" -- never fatal
+}
+
+# The branch a generated workflow should trigger on: the REMOTE's default, asked
+# of every remote (a repo may have no `origin` -- one here has `private`/`public`),
+# falling back to the checked-out branch only when there is no remote to ask.
+# Using the current checkout instead would pin CI to whatever feature branch the
+# install happened to run from: it fires once, then never again once that branch
+# is gone. A dead gate reads as coverage, which is worse than no gate at all.
+function Get-DefaultBranch([string]$Root) {
+    # A namespaced name is a feature branch, not a default. refs/remotes/*/HEAD is
+    # a LOCAL CACHE written at clone time -- one repo's pointed at a temporary
+    # `claude/<generated-name>` branch while its real default was main -- so a
+    # cached answer that looks like a feature branch is rejected outright.
+    # Trusting it would pin CI to a branch that gets deleted, and a gate that
+    # stops firing looks exactly like a gate that passes.
+    $plausible = { param($b) $b -and $b -notmatch '/' -and $b -ne 'HEAD' }
+
+    try {
+        $remotes = @((& git -C $Root remote 2>$null) | Where-Object { $_ })
+
+        # 1. Ask the server. Authoritative, and immune to a stale local cache.
+        foreach ($r in $remotes) {
+            $ls = (& git -C $Root ls-remote --symref $r HEAD 2>$null)
+            if ($ls) {
+                $m = [regex]::Match(($ls -join "`n"), 'ref:\s+refs/heads/(\S+)\s+HEAD')
+                if ($m.Success -and (& $plausible $m.Groups[1].Value)) { return $m.Groups[1].Value }
+            }
+        }
+        # 2. Local cache, only if it names something plausible.
+        foreach ($r in $remotes) {
+            $rh = (& git -C $Root symbolic-ref --quiet ("refs/remotes/" + $r + "/HEAD") 2>$null)
+            if ($rh) {
+                $b = ("$rh".Trim() -replace ('^refs/remotes/' + [regex]::Escape($r) + '/'), '')
+                if (& $plausible $b) { return $b }
+            }
+        }
+        # 3. A conventional default that actually exists on a remote.
+        foreach ($cand in @("main", "master", "develop", "trunk")) {
+            foreach ($r in $remotes) {
+                if (& git -C $Root rev-parse --verify --quiet ("refs/remotes/" + $r + "/" + $cand) 2>$null) { return $cand }
+            }
+        }
+        # 4. No remote to ask: the branch in hand is the only one there is.
+        $b = (& git -C $Root rev-parse --abbrev-ref HEAD 2>$null)
+        if (& $plausible $b) { return "$b".Trim() }
+    } catch { }
+    return "main"
 }
 
 function Test-OwnedGlob([string]$Path, [string[]]$Globs) {
@@ -351,9 +404,168 @@ function Merge-JsonEntryMap {
     }
 }
 
+# Identity of one hook matcher entry (bundle-ownership.yaml merge_hook_settings):
+# the matcher STRING, "" when absent/null. $null marks a malformed (non-object)
+# entry, which can only pair with an equally malformed shipped one -- -ceq keeps
+# the comparison case-sensitive, matching python's == in install.sh.
+function Get-HookMatcher($Entry) {
+    if (-not ($Entry -is [System.Collections.IDictionary])) { return $null }
+    if (-not $Entry.Contains('matcher') -or $null -eq $Entry['matcher']) { return "" }
+    return [string]$Entry['matcher']
+}
+
+# Matcher-entry merge of a Claude Code settings file (bundle-ownership.yaml
+# merge_hook_settings). `hooks` is {event: [ {matcher, hooks:[...]}, ... ]}, so
+# neither the flat-map merge above nor the keyed-list conflict fits its shape.
+# Shipped matcher entries update to the shipped version; entries and whole
+# events only the project has survive; top-level keys the bundle ships stay the
+# bundle's (a replaced project edit is NAMED by the caller); extra top-level
+# keys ride along. Duplicate matchers pair by position -- the deterministic
+# convention documented in bundle-ownership.yaml. Same contract as
+# Merge-JsonEntryMap: returns a result object, prints nothing, and emits the
+# byte-identical text install.sh's python emits.
+function Merge-HookSettings {
+    param([string]$DiskText, [string]$ShipText, [string]$HooksKey)
+
+    $fail = { param($why) [pscustomobject]@{ Ok = $false; Reason = $why } }
+    try { $diskObj = ConvertTo-OrderedTree ($DiskText | ConvertFrom-Json) }
+    catch { return (& $fail "could not parse your copy as JSON") }
+    try { $shipObj = ConvertTo-OrderedTree ($ShipText | ConvertFrom-Json) }
+    catch { return (& $fail "could not parse the shipped copy as JSON") }
+    if (-not ($diskObj -is [System.Collections.IDictionary])) { return (& $fail "could not parse your copy as JSON") }
+    if (-not ($shipObj -is [System.Collections.IDictionary])) { return (& $fail "could not parse the shipped copy as JSON") }
+    if (-not $shipObj.Contains($HooksKey) -or -not ($shipObj[$HooksKey] -is [System.Collections.IDictionary])) {
+        return (& $fail "the shipped copy has no '$HooksKey' object")
+    }
+
+    $shipHooks = $shipObj[$HooksKey]
+    $diskHooks = $null
+    if ($diskObj.Contains($HooksKey) -and ($diskObj[$HooksKey] -is [System.Collections.IDictionary])) { $diskHooks = $diskObj[$HooksKey] }
+
+    $updated = 0; $added = @(); $yours = @(); $replaced = @(); $extraTop = @(); $topWins = @()
+
+    $mergedHooks = [ordered]@{}
+    foreach ($ev in @($shipHooks.Keys)) {
+        $shipList = @($shipHooks[$ev])
+        $diskList = $null
+        if ($null -ne $diskHooks -and $diskHooks.Contains($ev) -and
+            ($diskHooks[$ev] -is [System.Collections.IEnumerable]) -and -not ($diskHooks[$ev] -is [string]) -and
+            -not ($diskHooks[$ev] -is [System.Collections.IDictionary])) {
+            $diskList = @($diskHooks[$ev])
+        }
+        if ($null -eq $diskList) {
+            # Event the project does not have (or holds malformed): shipped wins.
+            $mergedHooks[$ev] = $shipList
+            foreach ($se in $shipList) { $added += "$ev[$(Get-HookMatcher $se)]" }
+            continue
+        }
+        $consumed = @($false) * $diskList.Count
+        $out = @()
+        foreach ($se in $shipList) {
+            $sm = Get-HookMatcher $se
+            $j = -1
+            for ($i = 0; $i -lt $diskList.Count; $i++) {
+                if (-not $consumed[$i] -and ($sm -ceq (Get-HookMatcher $diskList[$i]))) { $j = $i; break }
+            }
+            $out += ,$se
+            if ($j -lt 0) {
+                $added += "$ev[$sm]"
+            } else {
+                $consumed[$j] = $true
+                $updated++
+                if ((ConvertTo-HarnessJson $diskList[$j]) -cne (ConvertTo-HarnessJson $se)) { $replaced += "$ev[$sm]" }
+            }
+        }
+        for ($i = 0; $i -lt $diskList.Count; $i++) {
+            # The whole point: an entry only the project has.
+            if (-not $consumed[$i]) { $out += ,$diskList[$i]; $yours += "$ev[$(Get-HookMatcher $diskList[$i])]" }
+        }
+        $mergedHooks[$ev] = $out
+    }
+    if ($null -ne $diskHooks) {
+        foreach ($ev in @($diskHooks.Keys)) {
+            if (-not $shipHooks.Contains($ev)) {
+                $mergedHooks[$ev] = $diskHooks[$ev]
+                foreach ($de in @($diskHooks[$ev])) { $yours += "$ev[$(Get-HookMatcher $de)]" }
+            }
+        }
+    }
+
+    # Top level: shipped keys are the bundle's (hooks replaced by the merge
+    # above); keys only the project has ride along.
+    $root = [ordered]@{}
+    foreach ($k in @($shipObj.Keys)) {
+        if ($k -ceq $HooksKey) { $root[$k] = $mergedHooks; continue }
+        $root[$k] = $shipObj[$k]
+        if ($diskObj.Contains($k) -and ((ConvertTo-HarnessJson $diskObj[$k]) -cne (ConvertTo-HarnessJson $shipObj[$k]))) { $topWins += $k }
+    }
+    foreach ($k in @($diskObj.Keys)) {
+        if (-not $shipObj.Contains($k)) { $root[$k] = $diskObj[$k]; $extraTop += $k }
+    }
+
+    return [pscustomobject]@{
+        Ok = $true; Reason = ""
+        Text = (ConvertTo-HarnessJson $root 0) + "`n"
+        Added = @($added); Updated = $updated; Yours = @($yours)
+        Replaced = @($replaced); ExtraTop = @($extraTop); TopWins = @($topWins)
+    }
+}
+
+function Resolve-BundleDest {
+    <#
+      Resolve a bundle-declared relative path INSIDE $TargetDir, or refuse.
+
+      Destinations were built as `Join-Path $TargetDir ($f.path -replace '/','\')`
+      with $f.path taken from the bundle. Join-Path does not contain anything:
+      a '..' component walks out of the target, and an absolute path or a drive
+      letter discards $TargetDir entirely. A bundle declaring
+      "../../../Windows/System32/Tasks/harness" installed there.
+
+      The content hash does not cover this. It proves the bundle was not
+      altered after packing; it says nothing about whether what was packed is
+      benign. A bundle is governance content fetched from elsewhere, so its
+      paths are input, not fact.
+
+      Throws rather than sanitising: quietly rewriting a traversing path
+      installs a file the bundle author did not name, which is its own
+      surprise. A bundle reaching outside the target is broken or hostile, and
+      the operator should hear about it either way.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$RelPath
+    )
+    if ([string]::IsNullOrWhiteSpace($RelPath)) {
+        throw "Refusing bundle path (empty): '$RelPath'"
+    }
+    if ($RelPath -ne $RelPath.Trim()) {
+        throw "Refusing bundle path (leading/trailing whitespace): '$RelPath'"
+    }
+    if ($RelPath -match '^[\\/]' -or $RelPath -match '^[A-Za-z]:') {
+        throw "Refusing absolute bundle path: '$RelPath'"
+    }
+    $parts = $RelPath -split '[\\/]'
+    foreach ($part in $parts) {
+        if ($part -eq '..' -or $part -eq '') {
+            throw "Refusing bundle path that escapes the target: '$RelPath'"
+        }
+    }
+    $dest = Join-Path $Root ($parts -join '\')
+
+    # Compare the resolved PARENT: the file need not exist yet, and a symlink
+    # or junction planted at the destination is the trick being guarded against.
+    $rootFull = [System.IO.Path]::GetFullPath($Root.TrimEnd('\') + '\')
+    $parentDir = [System.IO.Path]::GetDirectoryName($dest)
+    $parentFull = [System.IO.Path]::GetFullPath($parentDir.TrimEnd('\') + '\')
+    if (-not $parentFull.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing bundle path that resolves outside the target: '$RelPath' -> $dest"
+    }
+    return $dest
+}
+
 $written = 0; $skipped = 0; $kept = 0; $merged = 0; $conflicts = @(); $merges = @()
 foreach ($f in $bundle.files) {
-    $dest = Join-Path $TargetDir ($f.path -replace '/', '\')
+    $dest = Resolve-BundleDest -Root $TargetDir -RelPath $f.path
     $bytes = [Convert]::FromBase64String($f.b64)
     $exists = Test-Path $dest
 
@@ -405,6 +617,45 @@ foreach ($f in $bundle.files) {
             }
             # Unparseable on either side, or the shipped copy lost the map: never
             # write a half-merged governance file. Say so and keep theirs.
+            if (-not $DryRun) { [System.IO.File]::WriteAllBytes("$dest.new", $bytes) }
+            $msg = "$($f.path): $($res.Reason) -- not merged"
+            Write-Output "  [CONFLICT] $msg"
+            Write-Output "             kept yours; shipped copy is $($f.path).new"
+            $conflicts += $msg
+            $kept++
+            continue
+        }
+
+        # 2b) Claude Code settings: hooks is {event: [matcher entries]}, a shape
+        # the flat-map merge above cannot address. Overwriting wholesale is how
+        # a project's own PreToolUse hook vanished with zero warning -- lost
+        # enforcement that nothing reported (see merge_hook_settings in
+        # bundle-ownership.yaml). Shipped matcher entries update, the project's
+        # own entries/events and extra top-level keys survive. Runs with or
+        # WITHOUT -Force for the same reason as the map merge: it cannot drop a
+        # project entry, and gating it would leave stale fleet hooks in place.
+        if ($hookSettings.ContainsKey($f.path) -and $diskBytes) {
+            $hk = $hookSettings[$f.path]
+            $res = Merge-HookSettings -DiskText ([System.Text.Encoding]::UTF8.GetString($diskBytes)) `
+                                      -ShipText ([System.Text.Encoding]::UTF8.GetString($bytes)) `
+                                      -HooksKey $hk
+            if ($res.Ok) {
+                if (-not $DryRun) { [System.IO.File]::WriteAllText($dest, $res.Text, $Utf8NoBom) }
+                Write-Output "  [MERGE] $($f.path) ($hk`: $(@($res.Added).Count) added, $($res.Updated) updated, $(@($res.Yours).Count) yours kept; $(@($res.ExtraTop).Count) extra top-level key(s) kept)"
+                if (@($res.Yours).Count -gt 0)    { Write-Output "             kept your hook entry(ies): $(@($res.Yours) -join ', ')" }
+                if (@($res.Added).Count -gt 0)    { Write-Output "             added by the bundle: $(@($res.Added) -join ', ')" }
+                if (@($res.ExtraTop).Count -gt 0) { Write-Output "             kept your extra top-level key(s): $(@($res.ExtraTop) -join ', ')" }
+                # Never silent: the next two lines name every project edit that
+                # did NOT survive (C10).
+                if (@($res.Replaced).Count -gt 0) { Write-Output "             bundle version replaces $(@($res.Replaced).Count) hook entry(ies) you had edited: $(@($res.Replaced) -join ', ')" }
+                if (@($res.TopWins).Count -gt 0)  { Write-Output "             bundle value wins on top-level key(s) you had changed: $(@($res.TopWins) -join ', ') (hold local overrides in .claude/settings.local.json)" }
+                $merges += "$($f.path): $(@($res.Yours).Count) project hook entry(ies) kept, $(@($res.ExtraTop).Count) extra top-level key(s) kept"
+                $merged++
+                continue
+            }
+            # Unparseable, or the shipped copy lost its hooks object: never
+            # write half-merged hook config -- a wrong guess here is silently
+            # missing enforcement. Say so and keep theirs.
             if (-not $DryRun) { [System.IO.File]::WriteAllBytes("$dest.new", $bytes) }
             $msg = "$($f.path): $($res.Reason) -- not merged"
             Write-Output "  [CONFLICT] $msg"
@@ -510,6 +761,46 @@ $receipt = [ordered]@{
 
 Write-Output "[install] done: $written written, $merged merged, $skipped skipped, $kept kept (project-owned). Integrity OK ($($bundle.content_hash))."
 
+# --- Exec bit for shipped .sh files (C7 parity meets NTFS). Windows has no
+# POSIX exec bit, so a commit made from here ships every .sh as mode 100644 and
+# the first run on Linux prod dies with "Permission denied". The bit that
+# PROPAGATES is the one in the git INDEX: update-index --chmod=+x records
+# 100755 regardless of the filesystem, and --add covers a first install where
+# the files are not yet tracked (with core.filemode=false, a later `git add`
+# keeps the recorded index mode instead of resetting it -- so the bit survives
+# into the commit). chmod itself is meaningless on NTFS; install.sh owns the
+# filesystem half. Best-effort: no git / not a work tree is reported, never
+# fatal -- but it IS reported, because the failure mode is silent (C10).
+$shOnDisk = @($bundle.files | ForEach-Object { $_.path } |
+              Where-Object { $_ -like '*.sh' -and (Test-Path (Join-Path $TargetDir ($_ -replace '/', '\'))) })
+if ($shOnDisk.Count -gt 0) {
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    # Native git chats on stderr (CRLF warnings, "fatal: not a git repository")
+    # and PS 5.1 under ErrorActionPreference=Stop turns a REDIRECTED stderr line
+    # into a terminating error AFTER git already ran -- which counted every
+    # successful stamp as a failure on the first test of this block. Drop to
+    # Continue around the git calls so stderr is data, and judge by exit code.
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $inTree = ""
+    if ($gitCmd) { try { $inTree = ("$(& git -C $TargetDir rev-parse --is-inside-work-tree 2>$null)").Trim() } catch { $inTree = "" } }
+    if (-not $gitCmd) {
+        Write-Output "[execbit] git not found -- index +x bit NOT set on $($shOnDisk.Count) .sh file(s); committed from Windows they will hit 'Permission denied' on Linux until re-installed there"
+    } elseif ($inTree -ne 'true') {
+        Write-Output "[execbit] target is not a git work tree -- nothing to stamp; the index +x bit applies once the project is under git"
+    } else {
+        $ok = 0; $failedSh = @()
+        foreach ($rel in $shOnDisk) {
+            try {
+                & git -C $TargetDir update-index --add --chmod=+x -- $rel 2>$null
+                if ($LASTEXITCODE -eq 0) { $ok++ } else { $failedSh += $rel }
+            } catch { $failedSh += $rel }
+        }
+        Write-Output "[execbit] git index +x (mode 100755) recorded on $ok/$($shOnDisk.Count) .sh file(s) -- survives commits made from Windows"
+        if ($failedSh.Count -gt 0) { Write-Output "[execbit] WARNING: could not stamp: $($failedSh -join ', ')" }
+    }
+    $ErrorActionPreference = $prevEap
+}
+
 # --- Portal-sync scaffold: create the two files a newcomer would otherwise
 # have to hand-author, at the right location, ready to edit. NEVER overwrite an
 # existing file (a real ingest key / configured project_id is preserved). These
@@ -603,6 +894,241 @@ impact:
     } else {
         Copy-Item $acSample $acFile
         Write-Output "[scaffold] agent-config.yaml: stack not detected -> wrote sample to fill in (Agent Pack review->fix->test needs it)"
+    }
+}
+
+# --- CI gates scaffold (-WithCiGates): copy the shipped workflow templates into
+# .github/. Opt-in, because adding workflow files changes what runs on every push.
+# Never overwrites: a project's own tuned workflow outranks the template.
+if ($WithCiGates) {
+    $ciSrc = Join-Path $syncDir "templates\ci"
+    if (-not (Test-Path $ciSrc)) {
+        Write-Output "[ci] no templates/ci in this bundle -- nothing to copy"
+    } else {
+        $wf = Join-Path $TargetDir ".github\workflows"
+        if (-not (Test-Path $wf)) { New-Item -ItemType Directory -Path $wf -Force | Out-Null }
+        foreach ($pair in @(
+            @{ src = "harness-gate.yml.template"; dst = (Join-Path $wf "harness-gate.yml") },
+            @{ src = "tests.yml.template";        dst = (Join-Path $wf "tests.yml") },
+            @{ src = "CODEOWNERS.template";       dst = (Join-Path $TargetDir ".github\CODEOWNERS") }
+        )) {
+            $s = Join-Path $ciSrc $pair.src
+            if (-not (Test-Path $s)) { continue }
+            if (Test-Path $pair.dst) {
+                Write-Output "[ci] $(Split-Path $pair.dst -Leaf) already exists -> kept"
+                continue
+            }
+            $text = Get-Content $s -Raw -Encoding utf8
+
+            # tests.yml ships with every stack block commented and a failing
+            # placeholder, because a template that guesses wrong fails on every
+            # PR. But by this point the agent-config scaffold above has ALREADY
+            # detected the runner from the repo -- so making the operator
+            # hand-uncomment a block we already identified is a chore, and one
+            # they will hit at the worst moment (first red PR). Render the
+            # detected block active; fall back to the commented template only
+            # when detection genuinely found nothing.
+            if ($pair.src -eq "tests.yml.template") {
+                $ac = Join-Path $TargetDir ".harness\control\agent-config.yaml"
+                $full = ""
+                if (Test-Path $ac) {
+                    $m = [regex]::Match((Get-Content $ac -Raw -Encoding utf8), '(?m)^\s*full_suite_cmd:\s*"?([^"\r\n]+)"?\s*$')
+                    if ($m.Success) { $full = $m.Groups[1].Value.Trim() }
+                }
+                # The setup steps must match what THIS repo actually has, not what
+                # a stack usually has. A generated workflow that fails on its
+                # first PR for a missing lockfile or a missing .env teaches the
+                # team to ignore red CI -- the worst habit this whole gate exists
+                # to prevent. So each branch below is conditioned on files that
+                # were checked to exist.
+                # Monorepo: the runner does not live at the repo root. Find the
+                # directory that actually holds the manifest and run there.
+                # Without this the workflow does `npm ci` at a root with no
+                # package.json and dies on step one -- three projects in this
+                # fleet keep their manifest in a subdirectory (web/, a
+                # product-named folder, and apps/backend/).
+                $workDir = ""
+                if ($full -match '^(npx |npm )' -and -not (Test-Path (Join-Path $TargetDir "package.json"))) {
+                    # An explicit `--prefix <dir>` names the directory outright.
+                    $pm = [regex]::Match($full, '--prefix\s+(\S+)')
+                    if ($pm.Success) {
+                        $workDir = $pm.Groups[1].Value
+                        # Once we cd there, --prefix would resolve relative to it
+                        # and look for <dir>/<dir>. Strip it.
+                        $full = ($full -replace '\s*--prefix\s+\S+', '').Trim()
+                    } else {
+                        # Otherwise pick the workspace that actually HAS tests.
+                        # Depth alone is not enough: one repo has
+                        # apps/frontend and apps/backend at the same depth, both
+                        # with a test script, and the shallowest-wins rule took
+                        # frontend -- which has no tests -- so the whole workflow
+                        # was skipped while six real test files sat in backend.
+                        # Having tests is the signal; a test script is only a
+                        # tiebreak.
+                        $cand = Get-ChildItem -Path $TargetDir -Filter package.json -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+                                Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.claude\\' } |
+                                Sort-Object { ($_.FullName -split '\\').Count }
+                        $best = $null; $bestScore = -1
+                        foreach ($c in $cand) {
+                            $dir = Split-Path $c.FullName -Parent
+                            $j = Get-Content $c.FullName -Raw -Encoding utf8
+                            $n = @(Get-ChildItem -Path $dir -Recurse -Depth 3 -File -ErrorAction SilentlyContinue |
+                                   Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.claude\\' -and
+                                                  $_.Name -match '\.(test|spec)\.[jt]sx?$' }).Count
+                            # tests dominate; a test script breaks ties among zeros
+                            $score = ($n * 100) + $(if ($j -match '"test"\s*:') { 1 } else { 0 })
+                            if ($score -gt $bestScore) { $bestScore = $score; $best = $dir }
+                        }
+                        if ($best -and $bestScore -gt 0) {
+                            $workDir = $best.Substring($TargetDir.Length).TrimStart('\','/').Replace('\','/')
+                        }
+                    }
+                    if ($workDir) { Write-Output "[ci] tests.yml: monorepo -- running in $workDir" }
+                }
+                # Lockfile/manifest checks must look where the runner will run.
+                $runRoot = $TargetDir
+                if ($workDir) { $runRoot = Join-Path $TargetDir ($workDir -replace '/', '\') }
+
+                $setup = ""
+                if ($full -match '^(npx |npm )') {
+                    # `npm ci` REQUIRES a lockfile and hard-fails without one.
+                    $inst = "npm ci"
+                    if (-not (Test-Path (Join-Path $runRoot "package-lock.json"))) { $inst = "npm install" }
+                    # The install step must run where the manifest is, not at the
+                    # repo root -- otherwise it fails before the test step is ever
+                    # reached.
+                    $instWd = ""
+                    if ($workDir) { $instWd = "`n        working-directory: $workDir" }
+                    $setup = "      - uses: actions/setup-node@v4`n        with:`n          node-version: '20'`n      - run: $inst$instWd"
+                } elseif ($full -match 'pytest|python -m') {
+                    $pyInstall = $null
+                    # Test dependencies commonly live in a *-test/-dev file rather
+                    # than requirements.txt; one project here has only
+                    # requirements-test.txt, and missing it produced a TODO for a
+                    # project whose deps were declared all along.
+                    foreach ($rf in @("requirements.txt", "requirements-test.txt", "requirements-dev.txt", "dev-requirements.txt")) {
+                        if (Test-Path (Join-Path $TargetDir $rf)) { $pyInstall = "pip install -r $rf"; break }
+                    }
+                    if (-not $pyInstall -and (Test-Path (Join-Path $TargetDir "pyproject.toml"))) {
+                        # Only installable when pyproject declares [project]; a
+                        # config-only pyproject (pytest/coverage/mypy settings)
+                        # makes `pip install -e .` fail with a metadata error.
+                        $pj = Get-Content (Join-Path $TargetDir "pyproject.toml") -Raw -Encoding utf8
+                        if ($pj -match '(?m)^\s*\[project\]') { $pyInstall = "pip install -e ." }
+                    }
+                    if ($pyInstall) {
+                        $setup = "      - uses: actions/setup-python@v5`n        with:`n          python-version: '3.12'`n      - run: $pyInstall"
+                    } else {
+                        # No honest install command exists. Say so in the file
+                        # rather than emitting one that will fail.
+                        $setup = "      - uses: actions/setup-python@v5`n        with:`n          python-version: '3.12'`n      # TODO: this repo has no requirements.txt and no installable pyproject [project]`n      # table, so the installer could not infer how to install deps. Add the`n      # right command here (e.g. pip install pytest -r dev-requirements.txt).`n      - run: pip install pytest"
+                        Write-Output "[ci] tests.yml: no requirements.txt / installable pyproject -- left a TODO for the dependency step"
+                    }
+                } elseif ($full -match 'artisan|phpunit') {
+                    # Laravel refuses to boot without APP_KEY, so `php artisan
+                    # test` fails immediately on a fresh checkout unless .env is
+                    # created and a key generated first.
+                    $php = "      - uses: shivammathur/setup-php@v2`n        with:`n          php-version: '8.2'`n      - run: composer install --no-interaction --prefer-dist"
+                    if (Test-Path (Join-Path $TargetDir ".env.example")) {
+                        $php += "`n      - run: cp .env.example .env`n      - run: php artisan key:generate"
+                    }
+                    $setup = $php
+                }
+                # Trigger on the branch this repo ACTUALLY uses. The template
+                # hardcoded `main`, so a repo on `master` got a workflow that
+                # installs cleanly, shows up in .github/, and never fires --
+                # present, green-looking, gating nothing. That is worse than no
+                # workflow: an absent gate is visibly absent, a dead one reads as
+                # coverage. Two of six projects were on master.
+                # The REMOTE's default branch, not whatever this checkout happens
+                # to be sitting on. An install run from a feature branch would
+                # otherwise pin CI to it -- firing once, then silently never again
+                # after the branch is deleted (one install was run from a
+                # temporary `claude/<generated-name>` branch). Same dead-gate
+                # failure as hardcoding `main`, reached from the other side.
+                $branch = Get-DefaultBranch $TargetDir
+
+                # A repo with no tests must not get a test workflow. Running a
+                # runner against zero tests either errors or reports a vacuous
+                # pass, and a green badge that tested nothing is a lie the whole
+                # gate exists to prevent (one project here has no test files).
+                $hasTests = @(Get-ChildItem -Path $runRoot -Recurse -Depth 4 -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.claude\\|\\\.harness\\' -and
+                                   ($_.Name -match '\.(test|spec)\.[jt]sx?$' -or $_.Name -match '^test_.*\.py$' -or $_.Name -match 'Test\.php$') }).Count
+                if ($hasTests -eq 0) {
+                    Write-Output "[ci] tests.yml SKIPPED: no test files found -- a workflow that tests nothing but reports green is worse than none"
+                    continue
+                }
+
+                # Indent the run step under working-directory when in a subdir.
+                $wdLine = ""
+                if ($workDir) { $wdLine = "`n        working-directory: $workDir" }
+
+                if ($setup -and $full) {
+                    $text = @"
+# Project test suite in CI -- AUTO-GENERATED by the installer from
+# .harness/control/agent-config.yaml (full_suite_cmd), so CI and the Agent Pack's
+# targeted-tester run the SAME suite. Two places declaring "how to test this
+# project" drift apart; this one reads the single declaration.
+name: tests
+
+on:
+  pull_request:
+    branches: [$branch]
+  push:
+    branches: [$branch]
+
+jobs:
+  test:
+    name: Project test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+$setup
+      - run: $full$wdLine
+"@
+                    Write-Output "[ci] tests.yml generated from agent-config (cmd: $full)"
+                } else {
+                    Write-Output "[ci] tests.yml: could not read a runner from agent-config -- wrote the template with all stack blocks commented (it fails until you enable one, by design)"
+                }
+            }
+
+            # harness-gate.yml is a static template that also hardcodes `main`.
+            # Same silent failure as tests.yml: on a `master` repo it would sit
+            # in .github/ and never fire. Rewrite its trigger to the real branch.
+            if ($pair.src -eq "harness-gate.yml.template") {
+                $gb = Get-DefaultBranch $TargetDir
+                if ($gb -ne "main") {
+                    $text = $text -replace '(?m)^(\s*branches:\s*)\[main\]', ('$1[' + $gb + ']')
+                    Write-Output "[ci] harness-gate.yml: trigger branch -> $gb"
+                }
+            }
+
+            # Substitute the owner handle so CODEOWNERS is usable as written.
+            # Falls back to leaving the placeholder visible rather than inventing
+            # a handle -- a wrong owner silently routes reviews to nobody.
+            if ($pair.src -eq "CODEOWNERS.template") {
+                $owner = ""
+                $projContract = Join-Path $TargetDir "contracts\project.yaml"
+                if (Test-Path $projContract) {
+                    $m = [regex]::Match((Get-Content $projContract -Raw -Encoding utf8), '(?m)^\s*owner:\s*"?@?([A-Za-z0-9_\-]+)"?\s*$')
+                    if ($m.Success) { $owner = "@" + $m.Groups[1].Value }
+                }
+                if ($owner) { $text = $text.Replace("@your-handle-here", $owner) }
+                else { Write-Output "[ci] CODEOWNERS: no owner in contracts/project.yaml -- left @your-handle-here to fill in" }
+            }
+            [System.IO.File]::WriteAllText($pair.dst, $text, $Utf8NoBom)
+            Write-Output "[ci] wrote $(Split-Path $pair.dst -Leaf)"
+        }
+        Write-Output "[ci] NOTE: CODEOWNERS only enforces when branch protection requires Code Owner review (C10)."
+        # Only true on the fallback path. Saying it unconditionally contradicted
+        # the "generated from agent-config" line printed two lines earlier.
+        if (Test-Path (Join-Path $TargetDir ".github\workflows\tests.yml")) {
+            $ty = Get-Content (Join-Path $TargetDir ".github\workflows\tests.yml") -Raw -Encoding utf8
+            if ($ty -match 'No stack selected') {
+                Write-Output "[ci] NOTE: tests.yml has every stack block commented -- uncomment yours or it fails by design."
+            }
+        }
     }
 }
 
@@ -728,7 +1254,7 @@ if ($MergeGuides) {
         $block = "$begin`n$note`n`n$govText`n`n$end"
 
         foreach ($rel in $targets) {
-            $p = Join-Path $TargetDir ($rel -replace '/', '\')
+            $p = Resolve-BundleDest -Root $TargetDir -RelPath $rel
             $dir = Split-Path -Parent $p
             if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
             if (-not (Test-Path $p)) {
@@ -785,7 +1311,7 @@ try {
     if (Test-Path $rPath) {
         $r = Get-Content -Path $rPath -Raw -Encoding utf8 | ConvertFrom-Json
         $out = foreach ($e in @($r.files)) {
-            $p = Join-Path $TargetDir ($e.path -replace '/', '\')
+            $p = Resolve-BundleDest -Root $TargetDir -RelPath $e.path
             $ih = ""
             if (Test-Path $p) {
                 try { $ih = Sha256HexOf ([byte[]](Get-Content -Path $p -Encoding Byte -Raw)) } catch { }

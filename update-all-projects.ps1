@@ -55,11 +55,16 @@ Write-Host " Base dir     : $BaseDir$(if ($WhatIf) { '   [DRY RUN]' })" -Foregro
 Write-Host "==================================================================" -ForegroundColor Green
 
 # --- 2. Discover onboarded projects (have .harness), skip the toolkit repos ---
+#
+# Discovery is shared with set-pdp-enforce / set-member-email so the three
+# cannot drift apart -- see lib-discover-projects.ps1 for why one level is not
+# enough once a product keeps several checkouts under one folder.
 $skip = @("HarnessAI-ToolKIT", "Harness-ToolKIT")
-$projects = Get-ChildItem $BaseDir -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -notin $skip -and (Test-Path (Join-Path $_.FullName ".harness")) }
+. (Join-Path $PSScriptRoot "lib-discover-projects.ps1")
+$projects = Get-HarnessProjects -BaseDir $BaseDir -Marker ".harness" -Skip $skip
 
 if (-not $projects) { Write-Warning "No onboarded projects (with .harness) found under $BaseDir"; exit 0 }
+Write-Host (" Found {0} onboarded project(s)" -f $projects.Count) -ForegroundColor Green
 
 # --- 3. Update each ---
 $summary = @()
@@ -82,6 +87,33 @@ foreach ($p in $projects) {
     # silently skipped and the project left on the older artifact.
     $isCurrent = if ($LatestHash -and $curHash) { $curHash -eq $LatestHash } else { $cur -eq $LatestVer }
     if ($isCurrent -and -not $Reinstall) {
+        # Content matches but the receipt records a DIFFERENT version number.
+        # That happens when an artifact was repacked under one number and later
+        # published under another -- identical bytes, two labels. Skipping here
+        # left the stale label in place permanently: the content check says
+        # "nothing to do", so no reinstall ever runs, so the receipt is never
+        # rewritten, and every screen reading it reports the wrong version
+        # forever. Correcting the label needs no reinstall; the bytes on disk are
+        # already the right ones, only the name for them is wrong.
+        if ($cur -ne $LatestVer -and (Test-Path $manifest)) {
+            if ($WhatIf) {
+                Write-Host ("  ~ {0,-26} v{1}  (content matches v{2} -- would relabel)" -f $p.Name, $cur, $LatestVer) -ForegroundColor Yellow
+                $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $LatestVer; Status = "would-relabel" }
+                continue
+            }
+            try {
+                $m.version = $LatestVer
+                $enc = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::WriteAllText($manifest, ($m | ConvertTo-Json -Depth 10), $enc)
+                Write-Host ("  ~ {0,-26} v{1} -> v{2}  (relabelled; content already identical)" -f $p.Name, $cur, $LatestVer) -ForegroundColor Yellow
+                $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $LatestVer; Status = "relabelled" }
+                continue
+            } catch {
+                # A receipt we could not rewrite is cosmetic damage, never a
+                # reason to fail an update run. Say so and move on.
+                Write-Host ("  ! {0,-26} content matches v{1} but the receipt could not be rewritten: {2}" -f $p.Name, $LatestVer, $_.Exception.Message) -ForegroundColor Yellow
+            }
+        }
         Write-Host ("  = {0,-26} v{1}  (up-to-date)" -f $p.Name, $cur) -ForegroundColor DarkGray
         $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $cur; Status = "up-to-date" }
         continue
@@ -108,10 +140,40 @@ foreach ($p in $projects) {
             $idArgs['ProjectDescription'] = $p.Name
             if ($ForceIdentity) { $idArgs['ForceIdentity'] = $true }
         }
-        & $Installer -BundleFile $latest.File -TargetDir $root -Force -MergeGuides @idArgs | Out-Null
+        # Output is captured, not piped to Out-Null. Swallowing it meant a failed
+        # install printed its reason into nowhere and this loop still recorded
+        # "updated" -- which is exactly what happened: one project reported
+        # 1.6.10 -> 1.6.11 while its receipt still said 1.6.2 and four files from
+        # three releases ago were missing. A summary line that reads as success
+        # is the most expensive kind of wrong.
+        $installOut = & $Installer -BundleFile $latest.File -TargetDir $root -Force -MergeGuides @idArgs 2>&1
+        $installExit = $LASTEXITCODE
+
         # Rebuild H1 retrieval index so context-query works immediately (best-effort).
         $rag = Join-Path $root ".harness\scripts\lib\harness_rag.py"
         if ($py -and (Test-Path $rag)) { $env:HARNESS_ROOT = $root; & $py.Source $rag index --root $root *>$null }
+
+        # C12 applied to this script: do not report an install as done because
+        # the installer was CALLED. Read the receipt back and require it to name
+        # the artifact we just installed. `&` on a script that exits does not
+        # throw, so $LASTEXITCODE is the only signal an exit code gives -- the
+        # same trap that produced 250 false hook errors before v1.6.2 -- and even
+        # a zero exit does not prove the files landed. The hash does.
+        $wroteHash = ""
+        $receipt = Join-Path $root ".harness\.bundle-manifest.json"
+        if (Test-Path $receipt) {
+            try { $wroteHash = (Get-Content $receipt -Raw -Encoding utf8 | ConvertFrom-Json).content_hash } catch { }
+        }
+        if ($LatestHash -and $wroteHash -ne $LatestHash) {
+            $why = if ($installExit -and $installExit -ne 0) { "installer exited $installExit" }
+                   elseif (-not $wroteHash) { "no receipt was written" }
+                   else { "receipt still names $wroteHash" }
+            Write-Warning ("    VERIFY FAILED for {0}: {1}. The files on disk are NOT the artifact." -f $p.Name, $why)
+            $tail = @($installOut | Select-Object -Last 6)
+            foreach ($l in $tail) { Write-Host "      $l" -ForegroundColor DarkYellow }
+            $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $cur; Status = "FAILED" }
+            continue
+        }
         $summary += [pscustomobject]@{ Project = $p.Name; Old = $cur; New = $LatestVer; Status = "updated" }
     } catch {
         Write-Warning "    FAILED: $_"
@@ -121,10 +183,19 @@ foreach ($p in $projects) {
 
 Write-Host "`n==================== SUMMARY ($($summary.Count) projects) ====================" -ForegroundColor Green
 $summary | Format-Table -AutoSize
-$updated = ($summary | Where-Object { $_.Status -eq "updated" }).Count
-$failed  = ($summary | Where-Object { $_.Status -eq "FAILED" }).Count
-Write-Host ("Done: {0} updated, {1} up-to-date, {2} failed." -f $updated,
-    ($summary | Where-Object { $_.Status -eq "up-to-date" }).Count, $failed) -ForegroundColor $(if ($failed) { "Yellow" } else { "Green" })
+$updated = @(($summary | Where-Object { $_.Status -eq "updated" })).Count
+$failed  = @(($summary | Where-Object { $_.Status -eq "FAILED" })).Count
+$current = @(($summary | Where-Object { $_.Status -eq "up-to-date" })).Count
+# Every status the loop can produce has to appear here. When "relabelled" and
+# the two -WhatIf statuses were missing, a run that touched eleven projects
+# printed "Done: 0 updated, 0 up-to-date, 0 failed" -- which reads as nothing
+# happened, in the one line most people read instead of the table above it.
+$relabelled = @(($summary | Where-Object { $_.Status -eq "relabelled" })).Count
+$planned    = @(($summary | Where-Object { $_.Status -like "would-*" })).Count
+$line = "Done: {0} updated, {1} up-to-date, {2} failed." -f $updated, $current, $failed
+if ($relabelled) { $line += " {0} relabelled (content already identical, only the receipt's version was stale)." -f $relabelled }
+if ($planned)    { $line += " {0} would change -- DRY RUN, nothing written." -f $planned }
+Write-Host $line -ForegroundColor $(if ($failed) { "Yellow" } else { "Green" })
 Write-Host "portal-sync.key / portal-sync.json were preserved. Run a Claude session per project to refresh telemetry." -ForegroundColor Gray
 
 # Optionally flip on PDP enforcement (safe JSON merge; preserves all other keys).

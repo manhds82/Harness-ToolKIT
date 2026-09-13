@@ -12,7 +12,7 @@
 #                   sentinel if present but not yet merged; skips if sentinel found.
 set -euo pipefail
 
-BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0; DRY_RUN=0
+BUNDLE=""; TARGET=""; FORCE=0; MERGE_CLAUDE=0; DRY_RUN=0; WITH_CI_GATES=0
 PROJECT_NAME=""; PROJECT_DESC=""; FORCE_IDENTITY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,6 +22,9 @@ while [[ $# -gt 0 ]]; do
     # Show what an install WOULD do and write nothing. Every consuming team asked
     # for this: they wanted the blast radius before committing to it.
     --dry-run)      DRY_RUN=1; shift;;
+    # Copy the shipped CI templates into .github/. Opt-in: adding workflow files
+    # changes what runs on every push, not something an install should do quietly.
+    --with-ci-gates) WITH_CI_GATES=1; shift;;
     # --merge-claude is the old name; both project the governance text into every
     # guide file listed in casan-policies governance.guide_targets.
     --merge-guides|--merge-claude) MERGE_CLAUDE=1; shift;;
@@ -41,9 +44,6 @@ fi
 PY="$(command -v python3 || command -v python || true)"
 [[ -n "$PY" ]] || { echo "python3 required" >&2; exit 3; }
 
-# Did the project already have its own settings.json? (so we don't clobber it)
-PRE_SETTINGS=0; [[ -f "$TARGET/.claude/settings.json" ]] && PRE_SETTINGS=1
-
 # The installer's own copy of the ownership rules (see the union note inside the
 # python block). Resolved relative to this script; absent for a standalone copy
 # of the installer, which the python side treats as "bundle rules only".
@@ -60,6 +60,44 @@ hi = "\n".join("%s:%s" % (f["path"], f["b64"]) for f in b["files"])
 comp = hashlib.sha256(hi.encode("utf-8")).hexdigest()
 if comp != b["content_hash"]:
     sys.exit("Bundle integrity check FAILED: computed %s != declared %s" % (comp, b["content_hash"]))
+
+
+def safe_dest(target, relpath):
+    """Resolve a bundle-declared path INSIDE target, or refuse.
+
+    Destinations were built with os.path.join(target, *path.split("/")) and the
+    path came from the bundle. os.path.join is not a containment operator: a
+    component of ".." walks out of the target, and an absolute component (or a
+    Windows drive letter) discards `target` altogether. A bundle declaring
+    "../../../etc/cron.d/harness" installed there.
+
+    The content hash does NOT cover this. It proves the bundle was not altered
+    after packing; it says nothing about whether what was packed is benign. A
+    bundle is executable governance content fetched from elsewhere, so its
+    paths are input, not fact.
+
+    Rejects rather than sanitises: silently rewriting a traversing path to
+    something "safe" installs a file the bundle author did not name, which is
+    its own surprise. A bundle that wants out of the target is broken or
+    hostile, and either way the operator should hear about it.
+    """
+    if not relpath or relpath.strip() != relpath:
+        sys.exit("Refusing bundle path (empty or padded): %r" % relpath)
+    if relpath.startswith("/") or relpath.startswith("\\"):
+        sys.exit("Refusing absolute bundle path: %r" % relpath)
+    if re.match(r"^[A-Za-z]:", relpath):
+        sys.exit("Refusing bundle path with a drive letter: %r" % relpath)
+    parts = relpath.replace("\\", "/").split("/")
+    if any(part in ("..", "") for part in parts):
+        sys.exit("Refusing bundle path that escapes the target: %r" % relpath)
+    dest = os.path.join(target, *parts)
+    root = os.path.realpath(target)
+    # realpath the PARENT: the file itself need not exist yet, and a symlink
+    # planted at the destination is exactly the trick this is guarding against.
+    parent = os.path.realpath(os.path.dirname(dest))
+    if parent != root and not parent.startswith(root + os.sep):
+        sys.exit("Refusing bundle path that resolves outside the target: %r -> %s" % (relpath, dest))
+    return dest
 print("[install] %s v%s (%d files) -> %s" % (b["name"], b["version"], b["file_count"], target))
 written = skipped = kept = merged = 0
 merges = []
@@ -72,7 +110,7 @@ conflicts = []
 def parse_ownership(text):
     """Shared by the payload parse and the installer-side fallback below.
     Returns the four rule collections and prints nothing -- the caller decides."""
-    owned, globs, keyed, mergem = [], [], {}, {}
+    owned, globs, keyed, mergem, hookset = [], [], {}, {}, {}
     section = ""
     for line in text.splitlines():
         m = re.match(r"^([a-z_]+):\s*$", line)
@@ -90,19 +128,21 @@ def parse_ownership(text):
             keyed[m.group(1)] = m.group(2)
         elif m and section == "merge_json_maps":
             mergem[m.group(1)] = m.group(2)
-    return owned, globs, keyed, mergem
+        elif m and section == "merge_hook_settings":
+            hookset[m.group(1)] = m.group(2)
+    return owned, globs, keyed, mergem, hookset
 
 
 # Ownership rules (C2) read from the bundle's OWN payload, so the rules governing
 # this install are the ones this bundle shipped -- not whatever an older copy left
 # on disk. Absent = fall back to `preserve` alone, i.e. previous behaviour exactly.
-own_globs, keyed_lists, merge_maps = [], {}, {}
+own_globs, keyed_lists, merge_maps, hook_settings = [], {}, {}, {}
 _own = next((f for f in b["files"] if f["path"] == ".harness/control/bundle-ownership.yaml"), None)
 if _own:
     try:
-        o, g, kl, mm = parse_ownership(base64.b64decode(_own["b64"]).decode("utf-8"))
+        o, g, kl, mm, hs = parse_ownership(base64.b64decode(_own["b64"]).decode("utf-8"))
         preserve.update(o); own_globs.extend(g)
-        keyed_lists.update(kl); merge_maps.update(mm)
+        keyed_lists.update(kl); merge_maps.update(mm); hook_settings.update(hs)
     except Exception as e:
         print("[own] WARNING: bundle-ownership.yaml unreadable (%s); falling back to preserve list only" % e)
 
@@ -117,7 +157,7 @@ if _own:
 # rules only" -- the previous behaviour, silently.
 if own_rules_path and os.path.isfile(own_rules_path):
     try:
-        o, g, kl, mm = parse_ownership(open(own_rules_path, encoding="utf-8-sig").read())
+        o, g, kl, mm, hs = parse_ownership(open(own_rules_path, encoding="utf-8-sig").read())
         newer = []
         for p in o:
             if p not in preserve:
@@ -131,6 +171,9 @@ if own_rules_path and os.path.isfile(own_rules_path):
         for k in sorted(mm):
             if k not in merge_maps:
                 merge_maps[k] = mm[k]; newer.append("merge_json_maps:%s" % k)
+        for k in sorted(hs):
+            if k not in hook_settings:
+                hook_settings[k] = hs[k]; newer.append("merge_hook_settings:%s" % k)
         if newer:
             print("[own] this bundle predates %d ownership rule(s); applied from the installer's copy: %s"
                   % (len(newer), ", ".join(newer)))
@@ -236,6 +279,104 @@ def merge_json_map(disk_bytes, ship_bytes, map_key):
     return (True, "", json.dumps(root, indent=2, ensure_ascii=False) + "\n", st)
 
 
+def hook_matcher(e):
+    """Identity of one hook matcher entry (bundle-ownership merge_hook_settings):
+    the matcher STRING, "" when absent/null. None marks a malformed (non-object)
+    entry, which can only pair with an equally malformed shipped one."""
+    if not isinstance(e, dict):
+        return None
+    m = e.get("matcher", "")
+    return "" if m is None else str(m)
+
+
+def merge_hook_settings_file(disk_bytes, ship_bytes, hooks_key):
+    """Matcher-entry merge of a Claude Code settings file (bundle-ownership
+    merge_hook_settings). `hooks` is {event: [ {matcher, hooks: [...]}, ... ]},
+    so neither the flat-map merge above nor the keyed-list conflict fits its
+    shape. Shipped matcher entries update to the shipped version; entries and
+    whole events only the project has survive; top-level keys the bundle ships
+    stay the bundle's (a replaced project edit is NAMED by the caller); extra
+    top-level keys ride along. Duplicate matchers pair by position -- the
+    deterministic convention documented in bundle-ownership.yaml. Same contract
+    as merge_json_map: returns (ok, reason, text, stats), writes and prints
+    nothing, and emits the byte-identical text install.ps1 emits.
+    """
+    try:
+        disk = json.loads(disk_bytes.decode("utf-8"))
+        if not isinstance(disk, dict):
+            raise ValueError("not an object")
+    except Exception:
+        return (False, "could not parse your copy as JSON", None, None)
+    try:
+        ship = json.loads(ship_bytes.decode("utf-8"))
+        if not isinstance(ship, dict):
+            raise ValueError("not an object")
+    except Exception:
+        return (False, "could not parse the shipped copy as JSON", None, None)
+    if not isinstance(ship.get(hooks_key), dict):
+        return (False, "the shipped copy has no '%s' object" % hooks_key, None, None)
+
+    ship_hooks = ship[hooks_key]
+    disk_hooks = disk.get(hooks_key) if isinstance(disk.get(hooks_key), dict) else None
+    st = {"added": [], "updated": 0, "yours": [], "replaced": [],
+          "extra_top": [], "top_wins": []}
+
+    merged_hooks = {}
+    for ev, ship_list in ship_hooks.items():
+        if not isinstance(ship_list, list):
+            ship_list = [ship_list]
+        disk_list = None
+        if disk_hooks is not None and isinstance(disk_hooks.get(ev), list):
+            disk_list = disk_hooks[ev]
+        if disk_list is None:
+            # Event the project does not have (or holds malformed): shipped wins.
+            merged_hooks[ev] = ship_list
+            st["added"].extend("%s[%s]" % (ev, hook_matcher(se) or "") for se in ship_list)
+            continue
+        consumed = [False] * len(disk_list)
+        out = []
+        for se in ship_list:
+            sm = hook_matcher(se)
+            j = next((i for i in range(len(disk_list))
+                      if not consumed[i] and hook_matcher(disk_list[i]) == sm), None)
+            out.append(se)
+            if j is None:
+                st["added"].append("%s[%s]" % (ev, sm or ""))
+            else:
+                consumed[j] = True
+                st["updated"] += 1
+                if disk_list[j] != se:
+                    st["replaced"].append("%s[%s]" % (ev, sm or ""))
+        for i, de in enumerate(disk_list):
+            # The whole point: an entry only the project has.
+            if not consumed[i]:
+                out.append(de)
+                st["yours"].append("%s[%s]" % (ev, hook_matcher(de) or ""))
+        merged_hooks[ev] = out
+    if disk_hooks is not None:
+        for ev, dl in disk_hooks.items():
+            if ev not in ship_hooks:
+                merged_hooks[ev] = dl
+                st["yours"].extend("%s[%s]" % (ev, hook_matcher(de) or "")
+                                   for de in (dl if isinstance(dl, list) else []))
+
+    # Top level: shipped keys are the bundle's (hooks replaced by the merge
+    # above); keys only the project has ride along.
+    root = {}
+    for k, v in ship.items():
+        if k == hooks_key:
+            root[k] = merged_hooks
+            continue
+        root[k] = v
+        if k in disk and disk[k] != v:
+            st["top_wins"].append(k)
+    for k, v in disk.items():
+        if k not in ship:
+            root[k] = v
+            st["extra_top"].append(k)
+    return (True, "", json.dumps(root, indent=2, ensure_ascii=False) + "\n", st)
+
+
 def list_keys(text, list_key, item_key):
     """Item keys of a keyed YAML list, by line scan -- only has to recognize the
     shape the bundle itself ships: `<list>:` then `  - <key>: value`."""
@@ -252,9 +393,23 @@ def list_keys(text, list_key, item_key):
     return keys
 
 
+# OS hook selection: the bundle ships settings.json (powershell hooks) and
+# settings.posix.json (bash hooks). On this side of C7 parity the ACTIVE file
+# must carry the bash variant, so wherever the loop below writes or merges
+# .claude/settings.json the shipped side is the posix payload. Until v1.6.1
+# this was a `cp -f` at the END of the script -- which, run with --force,
+# clobbered the freshly merged settings.json and re-lost the project's own hook
+# entries, the exact defect merge_hook_settings exists to prevent.
+_posix = next((f for f in b["files"] if f["path"] == ".claude/settings.posix.json"), None)
+posix_selected = False
+
 for f in b["files"]:
-    dest = os.path.join(target, *f["path"].split("/"))
-    data = base64.b64decode(f["b64"])
+    dest = safe_dest(target, f["path"])
+    if f["path"] == ".claude/settings.json" and _posix is not None:
+        data = base64.b64decode(_posix["b64"])
+        posix_selected = True
+    else:
+        data = base64.b64decode(f["b64"])
     exists = os.path.exists(dest)
 
     # 1) Project-owned, by exact path or convention glob.
@@ -321,6 +476,56 @@ for f in b["files"]:
             conflicts.append(msg); kept += 1
             continue
 
+        # 2b) Claude Code settings: hooks is {event: [matcher entries]}, a shape
+        # the flat-map merge above cannot address. Overwriting wholesale is how
+        # a project's own PreToolUse hook vanished with zero warning -- lost
+        # enforcement that nothing reported (see merge_hook_settings in
+        # bundle-ownership.yaml). Shipped matcher entries update, the project's
+        # own entries/events and extra top-level keys survive. Runs with or
+        # WITHOUT --force for the same reason as the map merge: it cannot drop
+        # a project entry, and gating it would leave stale fleet hooks in place.
+        if f["path"] in hook_settings:
+            hk = hook_settings[f["path"]]
+            ok, reason, text, st = merge_hook_settings_file(disk, data, hk)
+            if ok:
+                if not dry_run:
+                    with open(dest, "w", encoding="utf-8", newline="\n") as fh:
+                        fh.write(text)
+                print("  [MERGE] %s (%s: %d added, %d updated, %d yours kept; %d extra top-level key(s) kept)"
+                      % (f["path"], hk, len(st["added"]), st["updated"], len(st["yours"]),
+                         len(st["extra_top"])))
+                if st["yours"]:
+                    print("             kept your hook entry(ies): %s" % ", ".join(st["yours"]))
+                if st["added"]:
+                    print("             added by the bundle: %s" % ", ".join(st["added"]))
+                if st["extra_top"]:
+                    print("             kept your extra top-level key(s): %s" % ", ".join(st["extra_top"]))
+                # Never silent: the next two lines name every project edit that
+                # did NOT survive (C10).
+                if st["replaced"]:
+                    print("             bundle version replaces %d hook entry(ies) you had edited: %s"
+                          % (len(st["replaced"]), ", ".join(st["replaced"])))
+                if st["top_wins"]:
+                    print("             bundle value wins on top-level key(s) you had changed: %s (hold local overrides in .claude/settings.local.json)"
+                          % ", ".join(st["top_wins"]))
+                merges.append("%s: %d project hook entry(ies) kept, %d extra top-level key(s) kept"
+                              % (f["path"], len(st["yours"]), len(st["extra_top"])))
+                merged += 1
+                if f["path"] == ".claude/settings.json" and _posix is not None:
+                    posix_selected = True
+                continue
+            # Unparseable, or the shipped copy lost its hooks object: never
+            # write half-merged hook config -- a wrong guess here is silently
+            # missing enforcement. Say so and keep theirs.
+            if not dry_run:
+                with open(dest + ".new", "wb") as fh:
+                    fh.write(data)
+            msg = "%s: %s -- not merged" % (f["path"], reason)
+            print("  [CONFLICT] %s" % msg)
+            print("             kept yours; shipped copy is %s.new" % f["path"])
+            conflicts.append(msg); kept += 1
+            continue
+
         # 3) A keyed list the project may have EXTENDED. Overwriting is right for
         # the shipped entries and destructive for the project's own, so when the
         # project has entries the bundle does not ship, stop and name them.
@@ -365,6 +570,8 @@ for f in b["files"]:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, "wb") as fh:
             fh.write(data)
+    if f["path"] == ".claude/settings.json" and _posix is not None:
+        posix_selected = True
     print("  [WRITE] %s" % f["path"]); written += 1
 
 # Conflicts are listed again by NAME: a count alone reads as "all fine", and the
@@ -398,6 +605,8 @@ receipt = {
 rdir = os.path.join(target, ".harness"); os.makedirs(rdir, exist_ok=True)
 with open(os.path.join(rdir, ".bundle-manifest.json"), "w", encoding="utf-8") as fh:
     _json.dump(receipt, fh, indent=2)
+if posix_selected:
+    print("[install] selected POSIX (bash) hooks for .claude/settings.json")
 print("[install] done: %d written, %d merged, %d skipped, %d kept (project-owned). Integrity OK (%s)." % (written, merged, skipped, kept, b["content_hash"]))
 PY
 
@@ -408,6 +617,45 @@ PY
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "[install] dry run complete -- no scaffolding, identity or guide changes were applied."
   exit 0
+fi
+
+# --- Exec bit on shipped .sh files (C7 parity meets git). A bundle installed
+# and committed from Windows ships every .sh as mode 100644 -- NTFS has no exec
+# bit to record -- and the first run on Linux prod dies with "Permission
+# denied". Two halves, both needed:
+#   1. chmod +x fixes THIS checkout (a clone inherits only what git recorded);
+#   2. the git INDEX bit (update-index --chmod=+x) is what a commit records and
+#      every later clone inherits. --add covers a first install where the files
+#      are not yet tracked; with core.filemode=false a later `git add` keeps
+#      the recorded index mode instead of resetting it.
+# Best-effort: not a git work tree just means half 2 does not apply -- but that
+# is SAID, because the failure mode is silent (C10).
+SH_LIST=()
+while IFS= read -r rel; do
+  rel="${rel%$'\r'}"   # Windows python emits CRLF; a stowaway \r fails every -f test below
+  [[ -n "$rel" && -f "$TARGET/$rel" ]] && SH_LIST+=("$rel")
+done < <("$PY" -c 'import json, sys
+b = json.load(open(sys.argv[1], encoding="utf-8"))
+print("\n".join(f["path"] for f in b["files"] if f["path"].endswith(".sh")))' "$BUNDLE")
+if [[ ${#SH_LIST[@]} -eq 0 ]]; then
+  # Never silent (C10): an empty list here means the bundle ships no .sh files
+  # at all, or none landed on disk -- either way the operator should see it.
+  echo "[execbit] no shipped .sh files found on disk -- nothing to chmod/stamp"
+fi
+if [[ ${#SH_LIST[@]} -gt 0 ]]; then
+  for rel in "${SH_LIST[@]}"; do
+    chmod +x "$TARGET/$rel" || echo "[execbit] WARNING: chmod +x failed on $rel"
+  done
+  echo "[execbit] chmod +x on ${#SH_LIST[@]} shipped .sh file(s)"
+  if command -v git >/dev/null 2>&1 && [[ "$(git -C "$TARGET" rev-parse --is-inside-work-tree 2>/dev/null)" == "true" ]]; then
+    if git -C "$TARGET" update-index --add --chmod=+x -- "${SH_LIST[@]}" 2>/dev/null; then
+      echo "[execbit] git index +x (mode 100755) recorded on ${#SH_LIST[@]} .sh file(s) -- survives commits, including from Windows checkouts"
+    else
+      echo "[execbit] WARNING: git update-index --chmod=+x failed -- the filesystem bit is set, but a commit from a filemode-less checkout may still ship mode 100644"
+    fi
+  else
+    echo "[execbit] target is not a git work tree -- filesystem +x only; the index bit applies once the project is under git"
+  fi
 fi
 
 # --- Portal-sync scaffold: create the two files a newcomer would otherwise have
@@ -487,6 +735,41 @@ YAML
   else
     cp "$AC_SAMPLE" "$AC_FILE"
     echo "[scaffold] agent-config.yaml: stack not detected -> wrote sample to fill in"
+  fi
+fi
+
+# --- CI gates scaffold (--with-ci-gates, parity with install.ps1): copy the
+# shipped workflow templates into .github/. Opt-in, because adding workflow files
+# changes what runs on every push. Never overwrites an existing workflow.
+if [[ "$WITH_CI_GATES" == "1" ]]; then
+  CI_SRC="$TARGET/.harness/templates/ci"
+  if [[ ! -d "$CI_SRC" ]]; then
+    echo "[ci] no templates/ci in this bundle -- nothing to copy"
+  else
+    mkdir -p "$TARGET/.github/workflows"
+    _ci_copy() {  # $1=template name  $2=destination
+      [[ -f "$CI_SRC/$1" ]] || return 0
+      if [[ -f "$2" ]]; then echo "[ci] $(basename "$2") already exists -> kept"; return 0; fi
+      cp "$CI_SRC/$1" "$2"
+      echo "[ci] wrote $(basename "$2")"
+    }
+    _ci_copy "harness-gate.yml.template" "$TARGET/.github/workflows/harness-gate.yml"
+    _ci_copy "tests.yml.template"        "$TARGET/.github/workflows/tests.yml"
+    _ci_copy "CODEOWNERS.template"       "$TARGET/.github/CODEOWNERS"
+    # Substitute the owner handle so CODEOWNERS is usable as written. No owner in
+    # the contract -> leave the placeholder visible; inventing a handle silently
+    # routes reviews to nobody, which is worse than an obvious TODO.
+    if [[ -f "$TARGET/.github/CODEOWNERS" ]]; then
+      OWNER="$(grep -oE '^[[:space:]]*owner:[[:space:]]*"?@?[A-Za-z0-9_-]+' "$TARGET/contracts/project.yaml" 2>/dev/null \
+               | sed -E 's/.*owner:[[:space:]]*"?@?//' | head -1 || true)"
+      if [[ -n "$OWNER" ]]; then
+        sed -i.bak "s/@your-handle-here/@$OWNER/g" "$TARGET/.github/CODEOWNERS" && rm -f "$TARGET/.github/CODEOWNERS.bak"
+      else
+        echo "[ci] CODEOWNERS: no owner in contracts/project.yaml -- left @your-handle-here to fill in"
+      fi
+    fi
+    echo "[ci] NOTE: CODEOWNERS only enforces when branch protection requires Code Owner review (C10)."
+    echo "[ci] NOTE: tests.yml ships with every stack block commented -- uncomment yours or it fails by design."
   fi
 fi
 
@@ -605,7 +888,7 @@ if do_guides:
             "install; put your own project rules OUTSIDE this block. -->")
     block = "%s\n%s\n\n%s\n\n%s" % (BEGIN, note, gov, END)
     for rel in targets:
-        p = os.path.join(target, *rel.split("/"))
+        p = safe_dest(target, rel)
         os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
         if not os.path.exists(p):
             open(p, "w", encoding="utf-8", newline="\n").write(block + "\n")
@@ -636,17 +919,13 @@ if do_guides:
             print("[guides] appended governance to existing %s (your content untouched)" % rel)
 PY
 
-# --- OS hook selection (macOS/Linux): use the bash hooks, not the .ps1 ones ---
-# The bundle ships settings.json (Windows/powershell) + settings.posix.json
-# (bash). On POSIX, activate the bash variant -- but never overwrite a
-# settings.json the project already had (unless --force).
-POSIX="$TARGET/.claude/settings.posix.json"
-SET="$TARGET/.claude/settings.json"
-if [[ -f "$POSIX" && ( "$PRE_SETTINGS" -eq 0 || "$FORCE" -eq 1 ) ]]; then
-  cp -f "$POSIX" "$SET"
-  echo "[install] selected POSIX (bash) hooks for .claude/settings.json"
-fi
-
+# --- OS hook selection (macOS/Linux) now happens INSIDE the install loop: the
+# python step substitutes the settings.posix.json payload wherever it writes or
+# merges .claude/settings.json, so the bash variant is selected file-by-file.
+# The old end-of-script `cp -f settings.posix.json settings.json` is gone on
+# purpose: run with --force it re-clobbered the freshly merged settings.json
+# and lost the project's own hook entries -- the exact defect
+# merge_hook_settings (bundle-ownership.yaml) exists to prevent.
 
 # --- Re-stamp the receipt with what this install actually LEFT ON DISK ---------
 # The baseline for "did the project hand-edit a bundle-owned file?" must be the
@@ -668,7 +947,7 @@ if not os.path.exists(p):
     raise SystemExit(0)
 r = json.load(open(p, encoding="utf-8"))
 for e in (r.get("files") or []):
-    fp = os.path.join(target, *e["path"].split("/"))
+    fp = safe_dest(target, e["path"])
     ih = ""
     if os.path.exists(fp):
         with open(fp, "rb") as fh:
