@@ -25,7 +25,7 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.65 system-ui, "Segoe UI", Roboto, sans-serif; }
+         font: 16px/1.65 "Segoe UI", system-ui, Roboto, sans-serif; }
   .wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
   h1 { font-size: 1.95rem; line-height: 1.25; margin: 0 0 4px; }
   .subtitle { color: var(--muted); margin: 0 0 28px; }
@@ -100,7 +100,7 @@
   <tr><th>Cần có</th><th>Kiểm tra</th><th>Nếu thiếu</th></tr>
   <tr><td><b>Git</b></td><td><code>git --version</code></td><td>Cài tại git-scm.com</td></tr>
   <tr><td><b>PowerShell</b> (Windows có sẵn)</td><td><code>$PSVersionTable.PSVersion</code></td><td>Windows đã có sẵn 5.1</td></tr>
-  <tr><td><b>Python 3</b> (cho hook token-sampler)</td><td><code>python --version</code></td><td>Cài tại python.org (tick "Add to PATH")</td></tr>
+  <tr><td><b>Python 3</b> (cho <code>push-telemetry</code>: đếm lại token từ transcript, doctor, snapshot CASAN; và bộ thu Codex)</td><td><code>python --version</code></td><td>Cài tại python.org (tick "Add to PATH")</td></tr>
   <tr><td><b>Tài khoản Portal</b> (quyền Admin)</td><td>Đăng nhập được trang Portal</td><td>Nhờ admin tổ chức cấp / mời</td></tr>
 </table>
 </div>
@@ -151,11 +151,12 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git</code></pre>
   -PortalUrl  "https://<span class="fill">YOUR-PORTAL-HOST</span>"</code></pre>
 <p>Script sẽ tự động:</p>
 <ol>
-  <li>Cài bundle governance mới nhất (vd v1.4.9 — hooks + client push + eval + docscan) vào project.</li>
-  <li>Ghi <code>.harness/portal-sync.json</code> (portal_url + project_id + member_email + pdp_enforce).</li>
+  <li>Cài bundle governance mới nhất vào project — bản có <b>số version cao nhất</b> trong thư mục toolkit (chọn theo số version, không theo ngày file; bản public hiện mới nhất là 1.6.20) — hooks + client push + eval + docscan.</li>
+  <li>Ghi <code>.harness/portal-sync.json</code>: đặt <code>portal_url</code> + <code>project_id</code>, <b>giữ nguyên</b> các trường đã có (<code>member_email</code>, <code>pdp_enforce</code>…). Muốn đặt hai trường đó thì dùng <code>set-member-email.ps1</code> / <code>set-pdp-enforce.ps1</code> (cùng thư mục) hoặc sửa tay như mục 6.</li>
   <li>Ghi <code>.harness/portal-sync.key</code> (chỉ chứa key, đã tự gitignore).</li>
   <li>Test đẩy thử lên Portal ngay.</li>
 </ol>
+<p><code>-PortalUrl</code> là <b>bắt buộc</b>: bỏ trống thì script dừng ngay với lỗi (không ghi URL mẫu vào config rồi để lỗi DNS lộ ra sau).</p>
 <div class="callout ok">
   <strong>Kết quả mong đợi</strong>
   Dòng cuối in ra: <code>[push-telemetry] OK: actions=… incidents=… usage=…</code>.
@@ -165,7 +166,8 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git</code></pre>
 
 <h2 id="s4"><span class="num">4</span>Kiểm tra đã lên Portal</h2>
 <p>Mở Portal → trang <b>Projects</b> → tìm project của bạn. Các cột
-<b>Tokens / Tokens 24h / Errors / Prompts / Blocked</b> sẽ hiện số.
+<b>Trợ lý / Tokens / Cost / Errors / Prompts / Blocked / Sync</b> sẽ hiện số (Tokens và Cost
+theo hôm nay / tháng này / tất cả; Cost chỉ là <i>ước tính</i>).
 Có thể bấm <b>⟳ Sync now</b> để refresh, hoặc bấm tiêu đề cột để sắp xếp.</p>
 <p>Bấm vào project để xem các tab: Action Log, Security, Prompt Score, Source/Doc,
 Test Report, <b>Bug List</b> (từ <code>buglist.md</code>), <b>Harness Level</b> (CASAN
@@ -191,11 +193,17 @@ trong project, telemetry tự động đẩy lên Portal.</p>
   <strong>Khuyến nghị: bật auto-push định kỳ (đáng tin cậy nhất)</strong>
   Hook lúc kết thúc phiên đôi khi không chạy (đóng cửa sổ đột ngột, Ctrl-C…). Để data
   <b>luôn</b> lên đều mà không phụ thuộc điều đó, cài một Windows Scheduled Task chạy
-  <code>push-all</code> mỗi 15 phút — <b>chạy 1 lần, cover mọi project</b>:
+  <code>harness-sync.local.ps1</code> (driver chạy push-telemetry cho mọi project) mỗi 15 phút — <b>chạy 1 lần, cover mọi project</b>:
   <pre><code>powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1</code></pre>
-  Task tự đẩy telemetry của mọi project đã có key, bỏ qua project chưa có data. Xem log:
-  <code>Get-Content "$env:LOCALAPPDATA\HarnessPortal\push-all.log" -Tail 20</code>. Gỡ:
+  Task chạy push-telemetry cho mọi project có <code>.harness\portal-sync.json</code> (bộ cài tạo sẵn file này); project còn URL/ID mẫu hoặc chưa có key được đếm là <i>not configured</i> và không đẩy gì, project chưa có data thì bỏ qua. Xem log:
+  <code>Get-Content "$env:LOCALAPPDATA\HarnessPortal\sync.log" -Tail 20</code> (<code>push-all.log</code> là log cũ của script trước đây, không phải của task này). Gỡ:
   thêm <code>-Uninstall</code>.
+</div>
+<div class="callout warn">
+  <strong>Lưu ý: file <code>*.local.ps1</code> không có trong bản clone</strong>
+  <code>install-push-scheduler.local.ps1</code> và <code>harness-sync.local.ps1</code> là script riêng của máy
+  maintainer (đã gitignore); bundle không ship scheduler nào. Máy không có hai file này vẫn đẩy telemetry
+  ở cuối mỗi phiên (hook SessionEnd) và khi bạn chạy tay <code>push-telemetry.ps1</code> như trên.
 </div>
 
 <h2 id="s6"><span class="num">6</span>Cách thủ công (nếu không muốn dùng script tổng)</h2>
@@ -236,14 +244,18 @@ trong project, telemetry tự động đẩy lên Portal.</p>
       <td>Key sai hoặc nhầm project. Vào Portal đúng project → Reveal ingest key → copy lại → dán lại vào <code>portal-sync.key</code>.</td></tr>
   <tr><td><code>Push failed: 403</code></td>
       <td>Tường lửa/CDN chặn. Client bản v1.2.1 đã gửi User-Agent riêng; đảm bảo bạn cài bản ≥ 1.2.1.</td></tr>
-  <tr><td><code>portal-sync.json not configured</code></td>
+  <tr><td><code>No .harness/portal-sync.json -- push sync not configured</code></td>
       <td>Chưa có file cấu hình. Chạy lại lệnh ở mục 3, hoặc tạo file theo mục 6.</td></tr>
+  <tr><td><code>portal_url is still the installer placeholder</code></td>
+      <td><code>portal-sync.json</code> còn URL mẫu (<code>YOUR-PORTAL-DOMAIN</code>) → điền URL Portal thật.</td></tr>
+  <tr><td><code>No ingest key</code></td>
+      <td><code>portal-sync.key</code> rỗng → dán key (hoặc đặt biến môi trường <code>HARNESS_PORTAL_INGEST_KEY</code>).</td></tr>
   <tr><td><code>OK: actions=0</code> hoài</td>
       <td>Chưa chạy Claude Code trong project → chưa có telemetry để đẩy. Cứ làm việc bình thường rồi đẩy lại.</td></tr>
   <tr><td>Portal vẫn thấy 0</td>
       <td>Bấm <b>⟳ Sync now</b> trên trang Projects. Với project trên máy cá nhân, số chỉ lên sau khi <i>push</i>.</td></tr>
   <tr><td><code>python not found</code> khi chạy hook</td>
-      <td>Cài Python 3 và tick "Add to PATH". Hook token-sampler cần Python để đọc transcript.</td></tr>
+      <td>Cài Python 3 và tick "Add to PATH". <code>push-telemetry</code> cần Python để đếm lại token từ transcript, chạy doctor và gửi snapshot CASAN; bộ thu Codex cũng cần. (Hook SubagentStop đếm token bằng PowerShell, không cần Python.)</td></tr>
 </table>
 </div>
 
@@ -257,7 +269,11 @@ qua API. Đó chính là vai trò của <code>portal-sync.json</code> + <code>po
 
 <h3>Số liệu Tokens có phải hoá đơn chính xác không?</h3>
 <p>Không — đây là số liệu <b>ước lượng</b> đọc từ transcript của phiên làm việc (đủ tốt để theo dõi xu hướng),
-không phải hoá đơn billing.</p>
+không phải hoá đơn billing. Claude Code đọc từ transcript của Claude; Codex đọc từ
+<code>~/.codex/sessions</code> lúc push (bundle ≥ 1.7.1 — bản public hiện có (1.6.20) <b>chưa có</b>; Codex chỉ được thu khi cài
+bundle ≥ 1.7.1 từ repo toolkit đầy đủ). Cột Cost = token × bảng giá API — dùng gói thuê bao thì
+không ai bị tính số tiền đó, nên hạn mức (Budgets) mặc định tính "cạn" theo <b>token</b> (<i>Limit on</i> = Tokens), không theo tiền;
+mặc định chỉ <b>cảnh báo</b> (<code>warn</code>) — chặn khi đặt <code>ask</code>/<code>deny</code>.</p>
 
 <h3>Có cần chạy gì trên server không?</h3>
 <p>Không. Toàn bộ chạy trên máy của bạn. Server chỉ nhận dữ liệu bạn đẩy lên.</p>

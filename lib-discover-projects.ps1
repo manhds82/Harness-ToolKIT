@@ -13,9 +13,19 @@
   fixed, which is exactly how the three copies of the release classifier ended
   up disagreeing (B-13/B-14). One function, dot-sourced.
 
-  A directory that HOLDS .harness IS the project; we only descend where there is
-  none, and then only one level plus a conventional repos/apps/projects folder.
-  Deeper than that and a stray vendored checkout starts looking like a project.
+  A directory that holds .harness IS a project, and it can ALSO be a container.
+  Those are not exclusive, and treating them as exclusive silently shrank the
+  fleet: this scan used to descend only into directories that were not projects
+  themselves, so the day a product's ROOT was onboarded, its six checkouts under
+  <product>\repos\ dropped out of discovery. The updater then reported 13/13
+  while six projects sat a release behind with no sign anywhere -- the same
+  "reads as complete coverage" failure this file was written to prevent, one
+  level up. Measured: after the 1.7.0 release, 13 projects matched the artifact
+  and 6 were still on 1.6.20.
+
+  So: every top-level directory is tested as a project AND descended into. Depth
+  stays at one level plus a conventional repos/apps/projects folder -- deeper and
+  a stray vendored checkout starts looking like a project.
 #>
 
 function Get-HarnessProjects {
@@ -35,7 +45,28 @@ function Get-HarnessProjects {
 
     $found = @($top | Where-Object { & $isProject $_ })
 
-    foreach ($container in ($top | Where-Object { -not (& $isProject $_) })) {
+    # EVERY top-level directory is descended into, including ones that are
+    # projects themselves. A product repo can hold its own .harness and still
+    # carry sibling checkouts under repos/; when this loop skipped those, they
+    # left the fleet silently. Sort -Unique below absorbs any overlap.
+    foreach ($container in $top) {
+        # A project sitting DIRECTLY under a top-level folder, e.g.
+        # <BaseDir>\NEW_APPLICATION\fla-gateway. This used to require the middle
+        # folder to be named repos/apps/projects, so a project under any other
+        # grouping folder was invisible: installed correctly, updated never,
+        # and counted as absent by every fleet report. Measured -- it is why the
+        # fleet count read 14 while the Handoff said 19.
+        #
+        # Matching by SHAPE (a directory holding the marker) instead of by the
+        # parent's NAME: a name list only ever knows the folder names somebody
+        # already thought of, and the failure it produces is silent.
+        $direct = Get-ChildItem $container.FullName -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { & $isProject $_ }
+        if ($direct) { $found += $direct }
+
+        # ...and one level deeper, but ONLY under the conventional folders.
+        # Unbounded recursion here would start collecting vendored checkouts
+        # and node_modules copies as if they were fleet projects.
         $inner = @(Get-ChildItem $container.FullName -Directory -ErrorAction SilentlyContinue |
                    Where-Object { $_.Name -in @("repos", "apps", "projects") })
         foreach ($dir in $inner) {
@@ -56,10 +87,26 @@ function Get-HarnessProjects {
 #>
 function Get-ProjectLabel {
     param([Parameter(Mandatory)]$Project, [Parameter(Mandatory)][string]$BaseDir)
-    $full = $Project.FullName.TrimEnd('\')
-    $base = (Resolve-Path $BaseDir).Path.TrimEnd('\')
+    # Trim BOTH separators, not just the Windows one.
+    #
+    # This trimmed only '\'. On Windows that is the separator, so it worked and
+    # every local run was green. On Linux the separator is '/', so TrimStart('\')
+    # removed nothing and every label came back with a leading slash:
+    # "/product" instead of "product".
+    #
+    # Not cosmetic. Test-ProjectMatch compares -Only/-Exclude against this label,
+    # so on a Linux runner every by-name selection silently matched nothing --
+    # `-Only product` would skip the project it names, and a fleet script would
+    # report "0 projects" as if there were none to do.
+    #
+    # Found by CI, which had been failing on tests/policy/test_fleet_discovery.py
+    # since the test landed. Local runs are Windows-only, so nothing here could
+    # have caught it; the red build was the only signal and nobody was reading it.
+    $sep = [char[]]@('\', '/')
+    $full = $Project.FullName.TrimEnd($sep)
+    $base = (Resolve-Path $BaseDir).Path.TrimEnd($sep)
     if ($full.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) {
-        return $full.Substring($base.Length).TrimStart('\').Replace('\', '/')
+        return $full.Substring($base.Length).TrimStart($sep).Replace('\', '/')
     }
     return $Project.Name
 }

@@ -32,58 +32,74 @@
   <h1>Harness Portal — Hướng dẫn sử dụng</h1>
   <p class="sub">Setup lần đầu → tạo project → gán budget → connect provider → đo token; và cách <b>đưa một dự án đang chạy local vào quản lý tập trung</b>. Placeholders: admin <code>https://portal.example.com</code>, member <code>https://member.example.com</code>. Author: Dau Sy Manh (<code>manhds@</code>) · Apache-2.0.</p>
 
-  <div class="panel"><b>Portal cho bạn gì:</b> tạo Project → thêm Member → gán Token Budget → connect AI provider (BYOK, key mã hoá) → <b>đo token &amp; chi phí</b> + dashboard (bug/findings, prompt bị chặn, vi phạm, làm-lại). Điều kiện: Portal đã được deploy (xem <a href="server-deploy-runbook.html">runbook triển khai</a>).</p>
+  <div class="panel"><b>Portal cho bạn gì:</b> tạo Project → thêm Member → gán Budget (theo token hoặc chi phí ước tính) → connect AI provider (BYOK, key mã hoá) → <b>đo token &amp; chi phí</b> + dashboard (bug/findings, prompt bị chặn, vi phạm, làm-lại). Điều kiện: Portal đã được deploy (xem <a href="server-deploy-runbook.html">runbook triển khai</a>).</div>
 
   <h2>Phần 1 — Vận hành Portal</h2>
   <ol class="big">
-    <li><b>First-time setup (Org Admin).</b> Mở admin UI <code>https://portal.example.com</code> → tab <b>First-time setup</b> → tạo Organization + tài khoản Org Admin (bạn tự đặt email + mật khẩu mạnh). Đăng nhập.</li>
-    <li><b>Tạo Project.</b> Ví dụ <code>acme-web</code>. Mỗi project là ranh giới quản lý (member, budget, provider, log riêng).</li>
-    <li><b>Gán Token Budget.</b> Đặt <code>max_tokens_per_session</code>, <code>max_cost_per_session_usd</code>, <code>alert_at_percent</code> (vd 80%). Có thể đặt theo cả project lẫn từng member.</li>
-    <li><b>Connect Provider (BYOK).</b> Tab Providers → chọn provider (Anthropic API / OpenAI / Deepseek / Qwen / GLM = <b>Tier-1 đo token thật</b>; Claude Code / Copilot / Codex = <b>Tier-2 best-effort</b>) → dán API key. Key được <b>mã hoá khi lưu</b> (đọc DB chỉ thấy ciphertext, API luôn mask).</li>
-    <li><b>Đo token.</b> Với connection <b>Tier-1</b>: gửi request qua proxy của Portal — mỗi lần đo <b>chính xác</b> tokens_in/out + chi phí, cộng vào budget, cảnh báo ở ngưỡng, chặn 402 khi cạn. Dùng panel <b>“Try it”</b> trong member UI, hoặc gọi API:
+    <li><b>First-time setup (Org Admin).</b> Mở admin UI <code>https://portal.example.com</code> → tab <b>First-time setup</b> → nhập <b>Setup key</b> (giá trị <code>SETUP_GATE_KEY</code> người deploy đặt trên server; nhập sai 5 lần từ một IP thì IP đó bị khoá setup 8 giờ — mặc định) + Organization name + tên hiển thị + email + mật khẩu mạnh → <b>Create organization</b>. Các lần sau dùng tab <b>Login</b> (có “Remember me for 1 week”). Nút <b>Đăng nhập bằng Google</b> chỉ hiện khi server đã cấu hình OIDC.</li>
+    <li><b>Tạo Project.</b> Màn <b>Projects</b> (menu Quản lý) → nhập Project name, Description, chọn <b>Đơn vị</b> (hoặc “Gốc tổ chức”) → <b>+ New Project</b>. Ví dụ <code>acme-web</code>. Mỗi project là ranh giới quản lý (member, budget, provider, log riêng).</li>
+    <li><b>Gán Budget.</b> Mở project → tab <b>Budgets</b> → chọn phạm vi (<i>Whole project</i> hoặc một member) → <b>Period</b> (monthly / daily / session) → <b>Limit on</b>: <i>Tokens</i> (mặc định) / <i>Estimated cost ($)</i> / <i>Either (first hit)</i> → <b>Max tokens</b>, <b>Max est. cost ($)</b>, <b>Alert at %</b> (vd 80) → <b>When exhausted</b>: <code>off</code> (form ghi “ignore”: không cảnh báo, không chặn qua PDP) / <code>warn</code> (chỉ cảnh báo) / <code>ask</code> (PDP giữ hành động rủi ro chờ admin duyệt ở <b>Approvals</b>) / <code>deny</code> (PDP chặn) → <b>Set budget</b>. Lưu ý: proxy Tier-1 <b>không</b> đọc chế độ này — hết 100% là trả 402 ở mọi chế độ, kể cả <code>off</code>.
+      <ul>
+        <li>Chỉ cap của trục <b>Limit on</b> quyết định “cạn”; cap để 0 hiện là <i>unset</i> — trục đó không chặn gì.</li>
+        <li><b>Cost chỉ là ước tính</b> (token × giá niêm yết API). Dùng subscription (Claude Code, Codex) thì không ai bị tính số tiền đó → nên giới hạn theo <b>token</b>, trừ khi project thật sự trả tiền theo token.</li>
+        <li>Kỳ daily/monthly đếm cả token từ telemetry (Claude Code/Codex) mỗi lần ingest; kỳ <i>session</i> chỉ đếm request qua proxy. Khi chạm ngưỡng % hoặc 100%, Portal tạo 1 incident (tab Security) + gửi email/webhook nếu đã cấu hình — một lần mỗi kỳ, trừ khi chế độ là <code>off</code>. Việc kiểm tra này chạy <b>lúc ingest telemetry</b> có <code>agentops.log</code> (push, hoặc server đọc checkout), không chạy ở mỗi request proxy: request proxy chỉ bật cờ <code>budget_alert</code> trong response (panel Try it hiện ra). Project chỉ dùng proxy mà không có telemetry thì không có incident, không có email.</li>
+        <li><code>ask</code>/<code>deny</code> tác động qua PDP (cần <code>pdp_enforce:true</code>, Phần 2 bước 4) và chỉ giữ/chặn <b>hành động rủi ro</b> mà hook gửi lên PDP — không chặn token chat thường. Proxy Tier-1 thì trả 402 khi budget đã cạn, bất kể chế độ.</li>
+      </ul></li>
+    <li><b>Connect Provider (BYOK).</b> Tab <b>Providers</b> → chọn provider (Anthropic API (Claude) / OpenAI / Deepseek / Qwen / GLM = <b>Tier-1 đo token thật</b>; Claude Code / GitHub Copilot / Codex CLI / Local (Ollama, on-prem) = <b>Tier-2 best-effort</b>) → đặt Display name → với Tier-1 dán API key (Tier-2 không cần key) → <b>Connect provider</b>. Key được <b>mã hoá khi lưu</b> (đọc DB chỉ thấy ciphertext, API luôn mask). Dự án dùng từ 2 tài khoản Claude trở lên: đặt tên mỗi connection trùng nhãn đã dùng trong <code>harness-switch-account.ps1</code>.</li>
+    <li><b>Đo token.</b> Với connection <b>Tier-1</b>: gửi request qua proxy của Portal — mỗi lần đo <b>chính xác</b> tokens_in/out + chi phí, cộng vào budget, cảnh báo ở ngưỡng, chặn 402 khi cạn. Dùng panel <b>“Try it”</b> (tab Overview của project trong member UI), hoặc gọi API:
       <pre><code>POST https://portal.example.com/api/member/projects/{project_id}/proxy/chat
 { "provider_connection_id":"...", "model":"...", "messages":[{"role":"user","content":"hello"}] }</code></pre></li>
-    <li><b>Thêm Member.</b> Add theo email → Portal sinh <b>invite link</b> (hoặc gửi email nếu bật SMTP) → member mở <code>https://member.example.com/accept-invite?token=...</code> đặt mật khẩu → chỉ thấy project được add, budget/provider (key mask).</li>
-    <li><b>Theo dõi.</b> Per-project tabs: Dashboard (cost/token theo member+provider), Budgets, Action Log, Security, Prompt Score, Source/Doc, Test Report, <b>Bug List</b> (M6), <b>Harness Level</b> (CASAN H1–H7). Menu trái: <b>Approvals</b> (duyệt hành động rủi ro), <b>Common Bug</b> (bug tái diễn/quan trọng toàn tổ chức).</li>
+    <li><b>Thêm Member.</b> Tab <b>Members</b> của project → nhập email, chọn role (member / admin) → <b>+ Add member</b> → Portal sinh <b>invite link</b> (nút Copy; gửi email nếu bật SMTP) → member mở <code>https://member.example.com/accept-invite?token=...</code> đặt mật khẩu. Member UI (<b>My Workspace</b>): menu <b>Dự án của tôi</b> chỉ liệt kê project được cấp; mỗi project có tab <b>Overview</b> (budget chung của project + budget cá nhân, provider với key mask, Try it), <b>My Log</b>, <b>My Security Flags</b>, <b>My Prompt Scores</b>. Ai được cấp quyền theo đơn vị thì có thêm báo cáo đơn vị trên thanh menu.</li>
+    <li><b>Theo dõi.</b> Per-project tabs: <b>Dashboard</b> (token/cost hôm nay·tháng·tổng, theo trợ lý AI, member, provider; budget), <b>Harness Level</b> (CASAN H1–H7 + H3 release gate), Settings, Members, Providers, Budgets, <b>Bundle</b> (gán phiên bản bundle), Action Log, Security, Prompt Score, Source/Doc, Test Report, <b>Bug List</b> (M6). Menu trái (17 màn):
+      <ul>
+        <li><b>Tổng quan</b> — Harness Level, Fleet Health, CASAN Rubric, Criteria Overview, Conventions, Rule Compliance, <b>Approvals</b> (duyệt hành động rủi ro).</li>
+        <li><b>Bằng chứng</b> — Audit Explorer (mọi tool call có side-effect), Security Feed, <b>Cost &amp; Budget</b> (token/chi phí toàn tổ chức, hạn mức, dự phóng), Agent Runs.</li>
+        <li><b>Quản lý</b> — Đơn vị (tối đa 2 cấp), Phân quyền (view/edit theo tổ chức / đơn vị / dự án), Projects, Members, Bundles, <b>Common Bug</b> (bug tái diễn/quan trọng toàn tổ chức).</li>
+      </ul>
+      Approvals và nhóm Quản lý (trừ Common Bug) chỉ hiện với Org admin. Ô <b>Phạm vi</b> trên cùng lọc mọi báo cáo theo toàn tổ chức / đơn vị / dự án.</li>
   </ol>
 
   <h2>Phần 2 — Đưa một dự án đang chạy local vào quản lý</h2>
   <p>Kịch bản: bạn <b>đã</b> có một dự án chạy local (đã dùng nhiều), giờ muốn quản trị nó qua Portal như các service khác trên máy. Harness chạy <b>ngay trong repo dự án</b> (không đổi cách bạn chạy app); Portal <b>đọc lại</b> log/telemetry của repo đó để hiển thị tập trung.</p>
   <ol class="big">
     <li><b>Cài governance bundle vào repo dự án</b> (một lần):
-      <pre><code># Windows
-powershell -File install.ps1 -BundleFile standard-governance-&lt;latest&gt;.bundle.json -TargetDir C:\path\to\my-service
+      <pre><code># Windows (PowerShell 5.1)
+powershell -File C:\path\to\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 -BundleFile C:\path\to\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-&lt;latest&gt;.bundle.json -TargetDir C:\path\to\my-service
 # macOS/Linux
-bash install.sh --bundle standard-governance-&lt;latest&gt;.bundle.json --target /path/to/my-service</code></pre>
-      Kiểm đã áp đúng: <code>harness-verify.ps1 -TargetDir C:\path\to\my-service</code> → <code>APPLIED OK</code>. Khởi động lại Claude Code trong repo để hook có hiệu lực.</li>
+bash /path/to/HarnessAI-ToolKIT/tools/harness-bundle/install.sh --bundle /path/to/HarnessAI-ToolKIT/bundles/standard-governance/standard-governance-&lt;latest&gt;.bundle.json --target /path/to/my-service</code></pre>
+      Bản mới nhất hiện là <code>1.8.0</code> (176 file). Thêm <code>-DryRun</code> / <code>--dry-run</code> để xem trước từng file (WRITE / KEEP / SKIP / MERGE / CONFLICT) mà không ghi gì.
+      Kiểm đã áp đúng: <code>powershell -File C:\path\to\HarnessAI-ToolKIT\tools\harness-bundle\harness-verify.ps1 -TargetDir C:\path\to\my-service</code> → <code>APPLIED OK</code>. Khởi động lại Claude Code trong repo để hook có hiệu lực.</li>
     <li><b>Đăng ký dự án trên Portal</b> (tab Settings của project): đặt
       <ul>
-        <li><code>harness_root_ref</code> = đường dẫn checkout thật của dự án (để Portal ingest log/telemetry của nó).</li>
+        <li><code>harness_root_ref</code> = đường dẫn checkout thật của dự án (để Portal ingest log/telemetry của nó) — phải là đường <b>bên trong container backend</b> (đường Linux). Compose đi kèm (<code>docker-compose.yml</code>, <code>docker-compose.prod.yml</code>) không mount sẵn checkout nào vào backend, nên checkout trên server phải được bind-mount thêm bằng một file overlay của bạn (vd <code>- /opt/my-service:/opt/my-service:ro</code> dưới <code>services.backend.volumes</code>; mount cùng đường thì giá trị này trùng đường trên server). Checkout nằm trên máy dev thì dùng cách push ở bước 3.</li>
         <li><code>gateway_base_url</code> = URL gateway phục vụ checkout đó (nếu dùng đồng bộ qua gateway).</li>
       </ul></li>
     <li><b>Đồng bộ telemetry — 2 cách:</b>
       <ul>
-        <li><b>Server đọc trực tiếp</b> (repo nằm cùng máy Portal): bấm <b>Run ingest/scan/run</b> ở các tab → Portal đọc <code>.harness/</code> của checkout tại <code>harness_root_ref</code>.</li>
-        <li><b>Push từ máy dev</b> (repo ở máy khác — phổ biến nhất): điền <code>.harness/portal-sync.json</code> <code>{portal_url, project_id, member_email, pdp_enforce}</code> + dán ingest key vào <code>.harness/portal-sync.key</code> (Settings → Reveal ingest key), rồi chạy <code>push-telemetry.ps1</code> (tự chạy lúc SessionEnd, hoặc scheduled task 15 phút). <b>member_email</b> = account chạy AI → gán token đúng member + provider connection.</li>
+        <li><b>Server đọc trực tiếp</b> (repo nằm cùng máy Portal và đã bind-mount vào container backend, như bước 2): Portal tự ingest mọi project có <code>harness_root_ref</code> đọc được, mỗi 5 phút (mặc định sẵn của backend, 300 giây; compose đi kèm không truyền biến <code>AUTO_INGEST_INTERVAL_SECONDS</code> vào container, muốn đổi phải thêm nó vào <code>environment</code> của service backend). Muốn ngay: <b>⟳ Sync now</b> ở màn Projects, hoặc <b>Run ingest</b> (tab Action Log) / <b>Scan</b> (Source/Doc) / <b>Run test suites</b> (Test Report) → Portal đọc <code>.harness/</code> của checkout tại <code>harness_root_ref</code>. Đường không đọc được thì <b>Run ingest</b> báo “… not found” và <b>⟳ Sync now</b> không tính project đó vào “Synced X/Y projects”.</li>
+        <li><b>Push từ máy dev</b> (repo ở máy khác — phổ biến nhất): điền <code>.harness/portal-sync.json</code> <code>{portal_url, project_id, member_email, pdp_enforce}</code> (installer tạo sẵn file mẫu) + dán ingest key vào <code>.harness/portal-sync.key</code> (Settings → Push telemetry → <b>Reveal ingest key</b>), rồi chạy <code>push-telemetry.ps1</code> (hook SessionEnd tự đẩy mỗi khi phiên kết thúc; muốn đẩy định kỳ thì tự đặt một scheduled task gọi script này). <b>member_email</b> = account chạy AI → gán token đúng member + provider connection. Làm một lệnh (cài bundle mới nhất với <code>-Force</code> + ghi <code>portal_url</code>/<code>project_id</code> + key + test push; giữ nguyên <code>member_email</code>/<code>pdp_enforce</code> đã có nhưng không tự điền hai trường này — tự thêm tay; bắt buộc truyền <code>-PortalUrl</code> thật):
+          <pre><code>powershell -File C:\path\to\HarnessAI-ToolKIT\tools\harness-bundle\setup-portal-sync.ps1 -ProjectDir C:\path\to\my-service -ProjectId &lt;project-id&gt; -IngestKey &lt;ingest-key&gt; -PortalUrl https://portal.example.com</code></pre></li>
       </ul>
-      Cả hai đường đưa lên: action log, security incidents (prompt bị chặn/vi phạm), <b>prompt scores</b> (review verdict), <b>source↔doc mapping</b> (H1), <b>test reports</b> (H3), và <b>bug list</b> (M6).</li>
-    <li><b>Bật chặn server-side (tuỳ chọn).</b> Đặt <code>pdp_enforce:true</code> trong <code>portal-sync.json</code> → hook PreToolUse hỏi Portal PDP: chặn outbound ngoài allowlist (H4), giữ deploy/DB-write chờ admin duyệt ở tab <b>Approvals</b> (H5), chặn release nếu test/verdict fail (H3). Fail-open (defense-in-depth, C10).</li>
+      Cả hai đường đưa lên: action log, security incidents (prompt bị chặn/vi phạm), <b>token usage</b> (agentops), <b>prompt scores</b> (review verdict), <b>test reports</b> (H3), và <b>bug list</b> (M6); <b>source↔doc mapping</b> (H1) đến qua push hoặc nút Scan. Đường push còn gửi bằng chứng CASAN/doctor cho Harness Level và Fleet Health.</li>
+    <li><b>Bật chặn server-side (tuỳ chọn).</b> Đặt <code>pdp_enforce:true</code> trong <code>portal-sync.json</code> → hook PreToolUse hỏi Portal PDP (chỉ với lệnh dạng rủi ro cao): chặn outbound ngoài allowlist (H4), giữ deploy/DB-write chờ admin duyệt ở màn <b>Approvals</b> (H5), chặn release nếu test/verdict fail (H3), và giữ/chặn hành động khi budget đã cạn ở chế độ <code>ask</code>/<code>deny</code>. Fail-open (defense-in-depth, C10).</li>
     <li><b>Gán budget + connect provider</b> cho project (như Phần 1) nếu muốn đo/chặn chi phí.</li>
     <li><b>Lặp cho từng dự án local khác.</b> Mỗi dự án = 1 project trong Portal; bạn quản lý tập trung nhiều dự án cùng lúc, mỗi cái vẫn chạy độc lập trên máy.</li>
   </ol>
 
-  <div class="warn"><b>Trung thực về đo token (C10):</b> Portal đo <b>chính xác</b> chỉ với request gửi <b>qua proxy Tier-1</b> của Portal. Token mà Claude Code tiêu khi bạn code trong dự án là <b>Tier-2 best-effort</b> — Portal chỉ ingest xấp xỉ từ ledger/telemetry, <b>không</b> đo tuyệt đối được (giới hạn kỹ thuật, không hứa suông). Muốn con số chi phí chính xác cho một luồng AI → cho luồng đó gọi model qua proxy Tier-1.</div>
+  <div class="warn"><b>Trung thực về đo token (C10):</b> Portal đo <b>chính xác</b> chỉ với request gửi <b>qua proxy Tier-1</b> của Portal. Token mà Claude Code (hay Codex) tiêu khi bạn code trong dự án là <b>Tier-2 best-effort</b> — hook đọc usage từ transcript phiên rồi đẩy lên qua telemetry; Portal <b>không</b> tự đo từng request và không chặn được token chat (giới hạn kỹ thuật, không hứa suông). Tiền hiển thị cho các phiên này là <b>ước tính theo giá API</b>, không phải hoá đơn. Muốn con số chi phí chính xác cho một luồng AI → cho luồng đó gọi model qua proxy Tier-1.</div>
 
   <h2>Bảng nhanh: quản lý gì ở đâu</h2>
   <table>
     <tr><th>Muốn</th><th>Nơi</th></tr>
     <tr><td>Kiểm dự án đã áp harness đúng chưa</td><td><code>harness-verify</code> (local) → APPLIED OK</td></tr>
-    <tr><td>Đo/chặn token &amp; chi phí</td><td>Portal: Budget + Provider (Tier-1) + proxy</td></tr>
-    <tr><td>Xem prompt bị chặn / vi phạm / làm-lại</td><td>Portal: Security / Action Log (ingest từ repo)</td></tr>
+    <tr><td>Đo/chặn token &amp; chi phí</td><td>Portal: tab <b>Budgets</b> (Limit on + When exhausted) + Provider (Tier-1) + proxy</td></tr>
+    <tr><td>Token/chi phí toàn tổ chức, theo đơn vị/model/trợ lý, dự phóng cuối tháng</td><td>Portal: menu <b>Cost &amp; Budget</b></td></tr>
+    <tr><td>Xem prompt bị chặn / vi phạm / làm-lại</td><td>Portal: tab Security / Action Log mỗi project; menu <b>Security Feed</b> (toàn tổ chức)</td></tr>
+    <tr><td>Chia dự án theo đơn vị, cấp quyền xem/sửa</td><td>Portal: menu <b>Đơn vị</b> + <b>Phân quyền</b></td></tr>
     <tr><td>Xem bug AI phát hiện / tự gây</td><td>Portal: tab <b>Bug List</b> mỗi project (từ <code>buglist.md</code>)</td></tr>
     <tr><td>Bug tái diễn/quan trọng nhiều dự án</td><td>Portal: menu <b>Common Bug</b> (nội dung/nguyên nhân/fix/gợi ý)</td></tr>
     <tr><td>Gán token đúng account</td><td><code>member_email</code> trong portal-sync.json</td></tr>
-    <tr><td>Duyệt deploy / hành động rủi ro</td><td>Portal: tab <b>Approvals</b> (khi <code>pdp_enforce:true</code>)</td></tr>
+    <tr><td>Duyệt deploy / hành động rủi ro</td><td>Portal: màn <b>Approvals</b> (khi <code>pdp_enforce:true</code>; cả khi budget cạn ở chế độ <code>ask</code>)</td></tr>
     <tr><td>Chặn lệnh nguy hiểm khi code</td><td>Hook trong repo (tự động, sau install)</td></tr>
   </table>
 

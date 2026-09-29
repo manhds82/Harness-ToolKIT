@@ -7,7 +7,7 @@
 <style>
   :root{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);
     --green:#1a7a3c;--green-bg:rgba(26,122,60,.1);--amber:#9a6a00;--amber-bg:rgba(154,106,0,.1);--red:#b3261e;--red-bg:rgba(179,38,30,.08);
-    --code:#0b3d91;--code-bg:#eef1f7;--sans:system-ui,'Segoe UI',Roboto,sans-serif;--mono:ui-monospace,Consolas,monospace;}
+    --code:#0b3d91;--code-bg:#eef1f7;--sans:'Segoe UI',system-ui,Roboto,sans-serif;--mono:ui-monospace,Consolas,monospace;}
   @media (prefers-color-scheme:dark){:root{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}}
   :root[data-theme="dark"]{--bg:#0f1219;--panel:#171b24;--ink:#e6e8ee;--muted:#9aa3b2;--border:#2a3040;--accent:#7d94ff;--accent-bg:rgba(125,148,255,.12);--green:#5fd08a;--green-bg:rgba(95,208,138,.12);--amber:#e0b35a;--amber-bg:rgba(224,179,90,.12);--red:#ff8a80;--red-bg:rgba(255,138,128,.12);--code:#a9c1ff;--code-bg:#1e2432;}
   :root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--ink:#1f2430;--muted:#6b7280;--border:#dfe2e8;--accent:#3455db;--accent-bg:rgba(52,85,219,.08);--green:#1a7a3c;--amber:#9a6a00;--red:#b3261e;--code:#0b3d91;--code-bg:#eef1f7;}
@@ -36,7 +36,7 @@
 
   <h2>Điều kiện</h2>
   <ul>
-    <li>Server Linux có <b>Docker + docker compose</b>, một <b>reverse proxy</b> (vd nginx) đang giữ :80/:443, và bạn <code>ssh</code> vào được.</li>
+    <li>Server Linux có <b>Docker + docker compose v2.24.4+</b> (file override dưới đây dùng tag <code>!reset</code> (cần ≥ 2.24) và <code>!override</code> (theo tài liệu Docker cần ≥ 2.24.4); Compose cũ hơn không hiểu), một <b>reverse proxy</b> (vd nginx) đang giữ :80/:443, và bạn <code>ssh</code> vào được.</li>
     <li>2 subdomain (hoặc 1) đã trỏ DNS về server: <code>portal.example.com</code> (admin), <code>member.example.com</code> (member).</li>
     <li>Máy dev có PowerShell + OpenSSH client (để chạy script đưa source lên).</li>
   </ul>
@@ -44,8 +44,10 @@
   <h2>Các bước</h2>
   <ol class="big">
     <li><b>Đưa source lên server (nhập PAT 1 lần).</b> Repo private → dùng script; PAT đi thẳng máy bạn → git credential store của server, không qua bên thứ ba:
-      <pre><code>powershell -File tools\deploy\fetch-source-to-server.ps1 -Server root@YOUR_SERVER -Username &lt;gh-user&gt;
-# -> /opt/harness-portal (source), /opt/harness-portal/portal (compose)</code></pre></li>
+      <pre><code>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\deploy\fetch-source-to-server.ps1 -Server root@YOUR_SERVER -Username &lt;gh-user&gt;
+# -> /opt/harness-portal (source), /opt/harness-portal/portal (compose)
+# (đổi E:\SourceCode\HarnessAI-ToolKIT nếu bạn clone toolkit chỗ khác)</code></pre>
+      Chạy lại script này sẽ <code>git fetch</code> + <code>reset --hard origin/main</code> trên server — file chưa track (<code>deploy.vars</code>, <code>docker-compose.server.yml</code>) không bị đụng.</li>
 
     <li><b>Sinh secrets trên server</b> (không commit, không để lộ). Nếu tooling của bạn chặn lệnh chạm <code>.env</code>, đặt tên file khác và dùng <code>--env-file</code>:
       <pre><code>cd /opt/harness-portal/portal
@@ -55,6 +57,7 @@ POSTGRES_DB=harness_portal
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 PORTAL_MASTER_KEY=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 32)
+SETUP_GATE_KEY=$(openssl rand -hex 16)
 ENVIRONMENT=production
 EMAIL_BACKEND=console
 KEY_PROVIDER=local
@@ -63,7 +66,9 @@ ADMIN_VITE_API_BASE_URL=
 MEMBER_VITE_API_BASE_URL=
 EOF
 chmod 600 deploy.vars</code></pre>
-      <span class="warn" style="display:block"><b>Sao lưu <code>PORTAL_MASTER_KEY</code> vào vault.</b> Mất nó = không giải mã được mọi provider key đã lưu.</span></li>
+      <span class="warn" style="display:block"><b>Sao lưu <code>PORTAL_MASTER_KEY</code> vào vault.</b> Mất nó = không giải mã được mọi provider key đã lưu.</span>
+      <span class="note" style="display:block"><code>POSTGRES_PASSWORD</code>, <code>PORTAL_MASTER_KEY</code>, <code>JWT_SECRET</code>, <code>SETUP_GATE_KEY</code> là <b>bắt buộc</b> — thiếu một biến thì <code>docker compose</code> dừng với thông báo "… is required". <code>SETUP_GATE_KEY</code> là Setup key của tab "First-time setup" (tạo org + admin đầu tiên): giữ riêng, đổi sau khi đã tạo org. Dùng gateway (<code>--profile gateway</code>) thì thêm <code>GATEWAY_API_KEY=$(openssl rand -hex 24)</code> (≥ 16 ký tự). SSO Google: thêm các biến <code>OIDC_*</code> (compose đã chuyển sẵn vào backend).</span>
+      <span class="note" style="display:block">Server đã dựng theo bản runbook cũ (chưa có <code>SETUP_GATE_KEY</code> trong <code>deploy.vars</code>)? Lần <code>up</code> kế tiếp sẽ dừng — chạy trước từ máy Windows: <code>powershell -File E:\SourceCode\HarnessAI-ToolKIT\portal\scripts\rotate-secrets-and-check.ps1 -SshTarget root@YOUR_SERVER -DryRun</code>, rồi chạy lại không có <code>-DryRun</code> (sinh key mạnh, backup <code>deploy.vars</code> cũ, không deploy).</span></li>
 
     <li><b>Chọn port trống + file override cô lập.</b> Kiểm port đang dùng (<code>ss -tlnH</code>), chọn 2 port trống (vd 9600/9610). Tạo <code>docker-compose.server.yml</code> — không publish db/backend, web bind localhost:
       <pre><code>services:
@@ -72,12 +77,13 @@ chmod 600 deploy.vars</code></pre>
   gateway:  { ports: !reset [] }
   admin-web:  { ports: !override ["127.0.0.1:9600:80"] }
   member-web: { ports: !override ["127.0.0.1:9610:80"] }</code></pre>
-      <span class="note" style="display:block">Dùng <code>!override</code> để <i>thay</i> port (không phải <code>!reset [list]</code>, cái đó xoá sạch). Render kiểm trước khi chạy: <code>docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml config | grep -E 'published|host_ip'</code> — phải thấy đúng 127.0.0.1:9600/9610, không có gì khác.</span></li>
+      <span class="note" style="display:block">Dùng <code>!override</code> để <i>thay</i> port (không phải <code>!reset [list]</code>, cái đó xoá sạch). Render kiểm trước khi chạy: <code>docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml config | grep -E 'published|host_ip'</code> — phải thấy đúng 127.0.0.1:9600/9610, không có gì khác.</span>
+      <span class="note" style="display:block"><code>--env-file deploy.vars</code> chỉ dùng để nội suy file compose — container backend chỉ nhận các biến có trong khối <code>environment:</code> của <code>docker-compose.yml</code>. Biến khác mà backend có đọc (<code>SMTP_*</code>, <code>ALERT_WEBHOOK_URL</code>, <code>KMS_KEY_ID</code>, <code>AWS_REGION</code>, <code>PORTAL_CONFIG_DIR</code>…) phải khai thêm ở đây, vd dạng khối: <code>backend: { ports: !reset [], environment: { ALERT_WEBHOOK_URL: "${ALERT_WEBHOOK_URL:-}" } }</code>.</span></li>
 
     <li><b>Build &amp; chạy</b> (project name riêng để cô lập tuyệt đối):
       <pre><code>docker compose --env-file deploy.vars -p harness-portal \
   -f docker-compose.yml -f docker-compose.server.yml up -d --build</code></pre>
-      Backend tự chạy <code>alembic upgrade head</code> + healthcheck; web/gateway chờ backend healthy.</li>
+      Backend tự chạy <code>alembic upgrade head &amp;&amp; uvicorn …</code> + healthcheck <code>/healthz</code>; web/gateway chờ backend healthy. Migration lỗi thì backend không lên (và web cũng không) — xem <code>docker compose … logs backend</code>, đừng đoán.</li>
 
     <li><b>Thêm vhost reverse-proxy + TLS</b> (chỉ <b>thêm file mới</b>, không sửa cũ). Tái dùng cert wildcard sẵn có nếu domain đã có (vd Cloudflare Origin cert phủ <code>*.example.com</code>), hoặc <code>certbot</code>:
       <pre><code># /etc/nginx/sites-enabled/portal.example.com.conf
@@ -95,17 +101,58 @@ nginx -t && nginx -s reload   # test TRƯỚC, reload graceful (không rớt sit
       <span class="note" style="display:block">Web đã build <b>same-origin</b> (nginx trong container tự proxy <code>/api</code> → backend), nên vhost host chỉ cần forward toàn bộ về cổng web — không cần cấu hình CORS.</span></li>
 
     <li><b>Verify + kiểm không đụng ai:</b>
-      <pre><code>docker compose -p harness-portal ps                       # 4 container up/healthy
+      <pre><code>cd /opt/harness-portal/portal
+# cùng một lệnh compose cho mọi thao tác — thiếu --env-file thì compose dừng vì POSTGRES_PASSWORD "is required"
+C="docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml"
+$C ps                                                     # 4 container up/healthy
+$C exec -T backend alembic current                        # phải kết thúc bằng "(head)" = revision mới nhất trong backend/alembic/versions
 curl -sk --resolve portal.example.com:443:127.0.0.1 https://portal.example.com/   # 200 (cert origin dùng -k)
-curl -s https://portal.example.com/api/auth/oidc/status   # {"enabled":false} (proxy OK)
+curl -s https://portal.example.com/api/auth/oidc/status   # {"enabled":false} (true nếu đã bật SSO) — proxy /api OK
 docker ps -q | wc -l                                      # tổng = (cũ) + 4, không mất cái nào</code></pre>
       Kiểm thêm vài site cũ vẫn trả 200.</li>
+
+    <li><b>Mở Portal lần đầu:</b> <code>https://portal.example.com</code> → tab <b>First-time setup</b> → nhập <b>Setup key</b> (giá trị <code>SETUP_GATE_KEY</code> trong <code>deploy.vars</code>) → tạo Organization + Org Admin. Sai 5 lần / IP → IP đó bị khoá 8 giờ.</li>
   </ol>
 
+  <h3>Cập nhật bản mới (các lần deploy sau)</h3>
+  <p>Operator chạy từ máy Windows (C11) — <code>portal/deploy-portal.ps1</code> dùng đúng bố cục của runbook này (<code>/opt/harness-portal</code>, project <code>harness-portal</code>, <code>deploy.vars</code> + <code>docker-compose.server.yml</code>) và đi qua <b>một</b> kết nối SSH:</p>
+  <pre><code>powershell -File E:\SourceCode\HarnessAI-ToolKIT\portal\deploy-portal.ps1 -SshTarget root@YOUR_SERVER -DryRun   # in toàn bộ, không gửi gì
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\portal\deploy-portal.ps1 -SshTarget root@YOUR_SERVER</code></pre>
+  <ul>
+    <li><b>Preflight ở máy local:</b> working tree sạch, <code>HEAD</code> = <code>origin/main</code>, test backend xanh, các web app build được (<code>npm run build</code>) — đỏ thì dừng. Nhưng nếu thiếu <code>node_modules</code> thì script chỉ in <code>[WARN] … not compiled here</code> và <b>bỏ qua</b> bước build web đó — chạy <code>npm ci</code> trong <code>portal\&lt;app&gt;</code> trước để preflight thực sự kiểm. <code>-SkipTests</code> bỏ qua cả test lẫn build web (chỉ in WARN).</li>
+    <li><b>Rollback point trước khi build:</b> image đang chạy được tag <code>harness-portal-&lt;service&gt;:rollback-&lt;timestamp&gt;</code>.</li>
+    <li><b>Build rồi mới up</b> (build lỗi thì container đang chạy không bị đụng) → <b>verify</b>: trạng thái container, route <code>-VerifyRoute</code> phải trả 401/403 (404 = image cũ vẫn chạy), <code>alembic current</code> = <code>-ExpectAlembicHead</code>, in kết quả <code>-ReadBackSql</code> → verify hỏng thì tự retag image cũ và verify lại. Dòng <code>MARK …</code> cuối cho biết dừng ở bước nào.</li>
+    <li><b>Đổi 3 tham số theo từng bản phát hành:</b> <code>-VerifyRoute</code> (route do chính bản này thêm), <code>-ExpectAlembicHead</code>, <code>-ReadBackSql</code>. Để nguyên giá trị của bản trước thì verify có thể "xanh" trên image cũ.</li>
+    <li>Migration chỉ thêm cột có default thì rollback image an toàn; migration không additive cần kế hoạch rollback riêng — script không tự quyết.</li>
+  </ul>
+
+  <h3>Sao lưu / khôi phục Postgres</h3>
+  <p>Overlay Caddy (<code>docker-compose.prod.yml</code>) có service <code>pg-backup</code>, nhưng overlay đó giành :80/:443 nên <b>không</b> dùng trên server chung. Dùng <code>portal/scripts/backup.sh</code> (cron) — truyền đúng lệnh compose qua biến <code>COMPOSE</code>, nếu không script gọi <code>docker compose</code> trần và không thấy project <code>harness-portal</code>:</p>
+  <pre><code>cd /opt/harness-portal/portal
+COMPOSE="docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml" \
+  BACKUP_DIR=/var/backups/harness-portal RETAIN=14 ./scripts/backup.sh     # -> portal-YYYY-MM-DD_HHMMSS.sql.gz, giữ 14 bản mới nhất</code></pre>
+  <div class="warn"><b>Khôi phục cần một DB RỖNG — <code>restore.sh</code> không tự xoá gì.</b> <code>backup.sh</code> chạy <code>pg_dump</code> dạng plain, không <code>--clean</code>, nên dump không có lệnh DROP; <code>restore.sh</code> đổ thẳng dump vào DB hiện có qua <code>psql</code> mà không bật <code>ON_ERROR_STOP</code> (dù comment đầu file nói "drops and recreates"). Khi backend đã từng chạy, alembic đã tạo đủ bảng → mọi <code>CREATE TABLE</code>/<code>COPY</code> đụng độ, psql chạy tiếp và script vẫn in <code>done</code>: dữ liệu <b>không</b> bị huỷ mà cũng <b>không</b> được khôi phục. Làm theo thứ tự dưới. <b>Chưa được chạy thử</b> — suy từ đọc <code>backup.sh</code>/<code>restore.sh</code> (C12); đọc kỹ output, có dòng <code>ERROR:</code> là khôi phục chưa trọn.</div>
+  <pre><code>cd /opt/harness-portal/portal
+C="docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml"
+# 0) backup bản hiện tại trước (lệnh backup.sh ở trên) — bước 2 XOÁ DB
+# 1) dừng mọi thứ ghi DB; backend khi lên sẽ chạy alembic và tạo lại bảng
+$C stop backend admin-web member-web            # + gateway nếu có chạy
+# 2) DB rỗng: xoá rồi tạo lại (POSTGRES_USER của image postgres là superuser; đổi tên user/DB ở deploy.vars thì sửa theo)
+$C exec -T postgres psql -U harness_portal -d postgres -c "DROP DATABASE harness_portal"
+$C exec -T postgres psql -U harness_portal -d postgres -c "CREATE DATABASE harness_portal OWNER harness_portal"
+# 3) nạp dump (hỏi gõ lại tên DB để xác nhận)
+COMPOSE="$C" ./scripts/restore.sh /var/backups/harness-portal/portal-&lt;STAMP&gt;.sql.gz
+# 4) chỉ bây giờ mới bật lại backend — alembic đọc revision có trong dump, nâng tiếp nếu cần
+$C start backend admin-web member-web
+$C exec -T backend alembic current              # phải kết thúc bằng "(head)"</code></pre>
+  <p class="sub">Dump chỉ chứa ciphertext của provider key — khôi phục cần <b>cùng</b> <code>PORTAL_MASTER_KEY</code> đã dùng khi ghi dữ liệu. Hai script mặc định <code>POSTGRES_USER</code>/<code>POSTGRES_DB</code> = <code>harness_portal</code> (khớp <code>deploy.vars</code> ở bước 2); đổi tên thì truyền kèm hai biến đó.</p>
+
   <h3>Gỡ / rollback</h3>
-  <pre><code>docker compose -p harness-portal down            # gỡ container (giữ volume dữ liệu)
-docker compose -p harness-portal down -v         # gỡ cả volume (XOÁ dữ liệu Portal)
-rm /etc/nginx/sites-enabled/portal.example.com.conf /etc/nginx/sites-enabled/member.example.com.conf && nginx -t && nginx -s reload</code></pre>
+  <pre><code>cd /opt/harness-portal/portal
+C="docker compose --env-file deploy.vars -p harness-portal -f docker-compose.yml -f docker-compose.server.yml"
+$C down            # gỡ container (giữ volume dữ liệu)
+$C down -v         # gỡ cả volume (XOÁ dữ liệu Portal)
+rm /etc/nginx/sites-enabled/portal.example.com.conf /etc/nginx/sites-enabled/member.example.com.conf &amp;&amp; nginx -t &amp;&amp; nginx -s reload</code></pre>
 
   <div class="danger"><b>Trung thực / an toàn (C10):</b> cô lập theo compose-project nghĩa là build lỗi cũng không hỏng hệ khác; nhưng <b>luôn</b> render <code>config</code> để chắc port đúng trước khi <code>up</code>, và <code>nginx -t</code> trước khi reload. Không dùng overlay Caddy giành :80/:443 trên server đã có reverse proxy. Secrets sinh trên server, không commit.</div>
 

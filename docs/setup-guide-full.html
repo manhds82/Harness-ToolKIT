@@ -117,7 +117,7 @@
     <p>Hướng dẫn step-by-step: từ <b>clone git</b> → cài bộ governance vào từng project → deploy Portal → add project → <b>sync token / prompt / security</b> lên Portal. Mỗi bước đều có lệnh copy-chạy được. Ai cũng làm theo được.</p>
     <div class="meta">
       <span class="chip">Windows · PowerShell</span>
-      <span class="chip">Bundle standard-governance v1.2.7</span>
+      <span class="chip">Bundle standard-governance v1.8.0</span>
       <span class="chip">Self-healing transcript sync</span>
       <span class="chip">© 2026 Dau Sy Manh</span>
     </div>
@@ -176,19 +176,26 @@
   <section id="s1">
     <h2><span class="num">1</span> Clone git về</h2>
     <p class="lead">Lấy toolkit về máy dev — trong đó có bộ cài (bundle) và mọi script.</p>
-    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># Bản public (ai cũng clone được)</span>
+    <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># Repo toolkit ĐẦY ĐỦ (cần quyền truy cập) — mọi lệnh bên dưới dùng bố cục này</span>
 cd E:\SourceCode
+git clone <span class="tok">&lt;URL-REPO-TOOLKIT&gt;</span> HarnessAI-ToolKIT
+
+<span class="cmt"># HOẶC bản public (ai cũng clone được) — bố cục PHẲNG, xem khung cảnh báo bên dưới</span>
 git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre></div>
-    <p>Sau khi clone, bundle mới nhất nằm ở:</p>
-    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json</pre></div>
+    <p>Bundle mới nhất (bản có <b>số version cao nhất</b>) nằm ở — với repo <b>đầy đủ</b> (hiện là 1.8.0):</p>
+    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.8.0.bundle.json</pre></div>
+    <p>— với bản <b>public</b> (mới nhất hiện có 1.6.20; bundle và bộ cài nằm ngay thư mục gốc):</p>
+    <div class="code"><button class="copy">Copy</button><pre>E:\SourceCode\HarnessAI-ToolKIT\standard-governance-1.6.20.bundle.json
+E:\SourceCode\HarnessAI-ToolKIT\install.ps1</pre></div>
     <div class="call note"><b>Ghi chú:</b> repo này chỉ cần clone <b>một lần</b>. Nó không phải project của bạn — nó là “kho” chứa bộ cài để rải vào các project khác.</div>
+    <div class="call warn"><b>Bố cục đường dẫn:</b> các lệnh trong tài liệu này dùng bố cục của repo toolkit <b>đầy đủ</b> (<code>bundles\standard-governance\…</code>, <code>tools\harness-bundle\install.ps1</code>, <code>portal\</code>). Bản <b>public</b> là bản <b>phẳng</b>: <code>install.ps1</code>, <code>setup-portal-sync.ps1</code>, <code>set-pdp-enforce.ps1</code>… và file <code>*.bundle.json</code> nằm ngay thư mục gốc, chỉ phát hành một số version (mới nhất hiện có 1.6.20), và <b>không có</b> thư mục <code>portal\</code>. Dùng bản public thì đổi đường dẫn cho khớp.</div>
   </section>
 
   <section id="s2">
     <h2><span class="num">2</span> Cài bộ governance vào từng project</h2>
-    <p class="lead">Dùng <code>install.ps1</code> — nó verify hash rồi bung <b>92 file</b> (hooks + scripts + policies + schemas) vào thư mục project của bạn, byte-exact.</p>
+    <p class="lead">Dùng <code>install.ps1</code> — nó verify hash rồi bung <b>176 file</b> (bản 1.8.0: hooks + agents + skills + scripts + policies + schemas + contracts) vào thư mục project của bạn, byte-exact. Muốn xem trước từng file sẽ ghi/giữ: thêm <code>-DryRun</code>.</p>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.8.0.bundle.json `
   -TargetDir  E:\SourceCode\<span class="tok">&lt;YourProject&gt;</span> `
   -Force -MergeClaude</pre></div>
     <h3>Sau khi cài, project của bạn có thêm:</h3>
@@ -202,10 +209,11 @@ git clone https://github.com/manhds82/Harness-ToolKIT.git HarnessAI-ToolKIT</pre
 │   └─ <span class="d">memory/</span>       <span class="c"># constitution.md</span>
 ├─ <span class="d">contracts/</span>       <span class="c"># project / agent / tool-registry / workflow YAML</span>
 └─ <span class="k">CLAUDE.md</span>         <span class="c"># đã merge phần governance (-MergeClaude), an toàn chạy lại</span>
+   <span class="k">AGENTS.md</span>, <span class="k">.github/copilot-instructions.md</span>  <span class="c"># cùng khối governance cho Codex/Cursor/Copilot…</span>
     </div>
     <ul>
       <li><b><code>-Force</code></b>: ghi đè file bundle cũ (an toàn — không đụng code app của bạn).</li>
-      <li><b><code>-MergeClaude</code></b>: chèn phần governance vào <code>CLAUDE.md</code>; có sentinel chống merge trùng, chạy lại nhiều lần không sao.</li>
+      <li><b><code>-MergeClaude</code></b> (tên mới <code>-MergeGuides</code>, tên cũ vẫn chạy): chèn khối governance (giữa <code>BEGIN/END harness-governance</code>) vào mọi file guide trong <code>casan-policies.yaml</code> → <code>governance.guide_targets</code> (mặc định <code>CLAUDE.md</code>, <code>AGENTS.md</code>, <code>.github/copilot-instructions.md</code>). Lần cài sau chỉ thay phần <i>bên trong</i> khối; luật riêng của bạn viết <b>ngoài</b> khối. Chạy lại nhiều lần không sao.</li>
     </ul>
     <div class="call ok"><b>Kết quả bước này:</b> project đã có hooks + guard + push-telemetry. Từ giờ mỗi phiên Claude Code sẽ tự ghi telemetry. Chưa nối Portal — làm ở bước 3.</div>
   </section>
@@ -242,7 +250,7 @@ New-Item -ItemType File -Path "$proj\.harness\portal-sync.key" -Force | Out-Null
     <h3>Cách B — Làm hàng loạt cho mọi project (khuyến nghị)</h3>
     <p>Nếu bạn có nhiều project, viết 1 script <code>*.local.ps1</code> (đuôi <code>.local.ps1</code> đã được gitignore) liệt kê project → id, cài bundle + ghi <code>portal-sync.json</code> một lượt, rồi dán key vào từng file <code>.key</code>. Mẫu:</p>
     <div class="code"><button class="copy">Copy</button><pre>$Portal = "https://<span class="tok">YOUR-PORTAL-DOMAIN</span>"
-$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json"
+$Bundle = "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.8.0.bundle.json"
 $Install= "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
 
 $map = @(
@@ -268,25 +276,32 @@ foreach ($p in $map) {
     <p class="lead">Portal chạy bằng Docker: 1 backend (FastAPI) + 1 Postgres + 2 web (admin / member). Deploy trên server có Docker.</p>
 
     <h3>4.1 — Lấy source &amp; cấu hình secret</h3>
-    <div class="code"><button class="copy">Copy</button><pre>git clone https://github.com/manhds82/Harness-ToolKIT.git harness-portal
+    <div class="call warn"><b>Portal chỉ có trong repo toolkit đầy đủ</b> — bản public (phẳng) không có thư mục <code>portal/</code>. Repo private: đưa source lên server bằng <code>tools\deploy\fetch-source-to-server.ps1</code> (nhập PAT 1 lần, xem <a href="server-deploy-runbook.html">runbook</a> bước 1), hoặc clone bằng URL repo toolkit của bạn.</div>
+    <div class="code"><button class="copy">Copy</button><pre>git clone <span class="tok">&lt;URL-REPO-TOOLKIT&gt;</span> harness-portal
 cd harness-portal/portal
 cp .env.example .env
-<span class="cmt"># Sửa .env: đặt POSTGRES_PASSWORD, JWT_SECRET, KEK master key, SETUP_GATE_KEY…</span>
+<span class="cmt"># Sửa .env: đặt POSTGRES_PASSWORD, JWT_SECRET, PORTAL_MASTER_KEY (KEK), SETUP_GATE_KEY, ENVIRONMENT=production</span>
+<span class="cmt"># Bốn secret trên là BẮT BUỘC — rỗng/thiếu một cái thì docker compose dừng ("... is required")</span>
+<span class="cmt"># NHƯNG .env.example đã điền sẵn cả bốn bằng placeholder "change-me…" (không rỗng) và ENVIRONMENT=dev:</span>
+<span class="cmt"># compose cho qua, guard production không nhận ra → PHẢI thay TỪNG giá trị (vd: openssl rand -hex 32)</span>
 <span class="cmt"># KHÔNG commit .env (C5)</span></pre></div>
 
     <h3>4.2 — Chạy stack</h3>
     <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># Local / thử nghiệm</span>
 docker compose up -d --build
 
-<span class="cmt"># Production (Caddy TLS + không mở port trần + backup Postgres)</span>
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build</pre></div>
-    <p>Migrations (Alembic) chạy tự động khi backend khởi động — không cần lệnh riêng. Kiểm tra:</p>
-    <div class="code"><button class="copy">Copy</button><pre>docker compose ps          <span class="cmt"># 4 service Up</span>
-docker compose logs -f backend</pre></div>
+<span class="cmt"># Production (Caddy TLS + không mở port trần; cần Compose v2.24+)</span>
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+<span class="cmt"># + backup Postgres định kỳ: thêm --profile backup (service pg-backup)</span></pre></div>
+    <p>Migrations (Alembic) chạy tự động khi backend khởi động (<code>alembic upgrade head &amp;&amp; uvicorn</code>) — không cần lệnh riêng; migration lỗi thì backend không lên. Kiểm tra:</p>
+    <div class="code"><button class="copy">Copy</button><pre>docker compose ps          <span class="cmt"># 4 service Up (overlay prod: 5, thêm caddy)</span>
+docker compose logs -f backend
+docker compose exec -T backend alembic current   <span class="cmt"># phải có "(head)"</span></pre></div>
+    <div class="call note"><b>Server đang chạy hệ thống khác</b> (reverse proxy đã giữ :80/:443)? Đừng dùng overlay Caddy — làm theo <a href="server-deploy-runbook.html">server-deploy-runbook.html</a> (override bind 127.0.0.1 + vhost mới; cập nhật về sau bằng <code>portal\deploy-portal.ps1</code>).</div>
 
     <h3>4.3 — Khởi tạo lần đầu (bootstrap)</h3>
-    <p>Mở admin UI trên trình duyệt → màn Login yêu cầu <b>Setup gate key</b> để tạo Organization admin đầu tiên (chống người lạ bootstrap). Nhập key đã đặt trong <code>SETUP_GATE_KEY</code>. Sai 5 lần / IP → khoá 8 giờ.</p>
-    <div class="call note"><b>Prod:</b> đặt sau reverse-proxy TLS (Caddyfile có sẵn, tự cấp HTTPS). Secret nạp qua file <code>*_FILE</code>. Chi tiết vận hành xem <a href="server-deploy-runbook.html">server-deploy-runbook.html</a>.</div>
+    <p>Mở admin UI trên trình duyệt → tab <b>First-time setup</b> của màn Login yêu cầu <b>Setup key</b> để tạo Organization + admin đầu tiên (chống người lạ bootstrap). Nhập key đã đặt trong <code>SETUP_GATE_KEY</code>. Sai 5 lần / IP → khoá 8 giờ. Với <code>ENVIRONMENT=production</code>, backend <b>từ chối khởi động</b> nếu <code>SETUP_GATE_KEY</code>/<code>JWT_SECRET</code>/<code>PORTAL_MASTER_KEY</code> vẫn là giá trị mặc định trong code — nó chỉ so với default trong code, <b>không</b> nhận ra placeholder <code>change-me…</code> của <code>.env.example</code>.</p>
+    <div class="call note"><b>Prod:</b> đặt sau reverse-proxy TLS (Caddyfile có sẵn, tự cấp HTTPS). Secret có thể nạp qua file <code>*_FILE</code> (phải tự khai trong compose override — compose gốc không chuyển các biến <code>*_FILE</code>). Với compose gốc, <code>*_FILE</code> chỉ có tác dụng ngay cho <code>SMTP_PASSWORD</code>, <code>OIDC_CLIENT_SECRET</code>, <code>GATEWAY_API_KEY</code>: <code>JWT_SECRET</code>, <code>PORTAL_MASTER_KEY</code>, <code>SETUP_GATE_KEY</code> (<code>:?</code>) và <code>DATABASE_URL</code> (compose tự dựng) luôn khác rỗng, mà biến thường khác rỗng thì thắng — muốn dùng file cho bốn biến này, override phải đặt biến thường về rỗng (và <code>.env</code> vẫn cần giá trị để compose nội suy <code>:?</code>). Chi tiết vận hành xem <a href="server-deploy-runbook.html">server-deploy-runbook.html</a>.</div>
   </section>
 
   <section id="s5">
@@ -299,7 +314,8 @@ docker compose logs -f backend</pre></div>
         <div class="call sec" style="margin-top:8px"><b>Đây là 2 giá trị điền vào bước 3:</b> Project ID → <code>portal-sync.json</code>; ingest key → <code>portal-sync.key</code>.</div>
       </li>
       <li><b>Members</b>: add theo email → sinh invite link cho member tự nhận.</li>
-      <li><b>Token Budgets</b>: đặt max tokens / max cost / ngưỡng cảnh báo (%).</li>
+      <li><b>Token Budgets</b>: đặt max tokens / max cost / ngưỡng cảnh báo (%), kỳ (monthly/daily/session), cho cả project hoặc từng member.
+        <b>Limit on</b> = cap nào quyết định "cạn": <i>Tokens</i> (mặc định) / <i>Estimated cost</i> / <i>Either</i>. Cost chỉ là <b>ước tính</b> (token × bảng giá API) — dùng Claude Code/Codex theo gói thuê bao thì không ai bị tính số tiền đó, nên để Tokens. <b>When exhausted</b>: off / warn (mặc định) / ask (chặn, admin duyệt ở Approvals) / deny.</li>
       <li><b>Provider Connections</b>: chọn provider.
         <div class="tblwrap" style="margin-top:8px"><table>
           <tr><th>Tier</th><th>Provider</th><th>API key?</th><th>Cách đo token</th></tr>
@@ -336,8 +352,9 @@ docker compose logs -f backend</pre></div>
     <p>Trước khi push, script tự <b>resample transcript</b> của chính project đó (dựng lại <code>agentops.log</code> từ log Claude Code) — nên token được tính đủ <b>kể cả khi hook SessionEnd không chạy</b>.</p>
 
     <h3>7.2 — Sync TẤT CẢ project một lượt (khuyến nghị)</h3>
+    <div class="call warn"><b>Script riêng của máy:</b> <code>harness-sync.local.ps1</code> và <code>install-push-scheduler.local.ps1</code> (mục 7.3) là file <code>*.local.ps1</code> — <b>đã gitignore</b>, không có trong bản clone, và bundle không ship scheduler nào. Máy không có hai file này vẫn đẩy telemetry ở hook <b>SessionEnd</b> và khi chạy tay <code>push-telemetry.ps1</code> (7.1).</div>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\harness-sync.local.ps1</pre></div>
-    <p>Script này <b>tự quét</b> mọi thư mục dưới <span class="path">E:\SourceCode\*</span> có đủ <code>portal-sync.json</code> + <code>portal-sync.key</code>, resample transcript (khớp không phân biệt hoa/thường ổ đĩa, đệ quy cả subagents), rồi push từng project. <b>Thêm project mới không phải sửa script.</b></p>
+    <p>Script này <b>tự quét</b> các thư mục dưới <span class="path">E:\SourceCode</span> (sâu tới 3 cấp — thấy cả repo nằm trong thư mục chứa kiểu <code>&lt;sản-phẩm&gt;\repos\&lt;repo&gt;</code>) có <code>portal-sync.json</code>, rồi chạy <code>push-telemetry.ps1</code> của <b>từng</b> project như một tiến trình PowerShell riêng — nên dùng đúng một cài đặt push (resample transcript, gửi tăng dần, snapshot CASAN…). <b>Thêm project mới không phải sửa script.</b></p>
 
     <h3>7.3 — Tự động mỗi 15 phút (Scheduled Task)</h3>
     <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># cài 1 lần — chạy nền, không phụ thuộc bạn có đóng Claude hay không</span>
@@ -345,16 +362,24 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
 
 <span class="cmt"># đổi chu kỳ / gỡ</span>
 powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1 -IntervalMinutes 10
-powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1 -Uninstall</pre></div>
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps1 -Uninstall
+
+<span class="cmt"># task tên HarnessPortalPushAll, chạy harness-sync.local.ps1; log của nó:</span>
+Get-Content "$env:LOCALAPPDATA\HarnessPortal\sync.log" -Tail 20
+<span class="cmt"># kiểm lịch THẬT đang chạy (task có thể đã bị sửa sau khi tạo):</span>
+schtasks /Query /TN HarnessPortalPushAll /V /FO LIST</pre></div>
     <div class="call ok"><b>Ngoài ra:</b> mỗi khi một phiên Claude Code kết thúc, hook <b>SessionEnd</b> cũng tự gọi push-telemetry. Vậy có 3 lớp: hook cuối phiên + scheduled task + chạy tay khi cần.</div>
 
     <h3>Push gửi những gì?</h3>
     <div class="tblwrap"><table>
       <tr><th>Nguồn</th><th>Lên Portal thành</th></tr>
-      <tr><td><code>telemetry/agentops.log</code></td><td>Usage events (token in/out, cost, model)</td></tr>
-      <tr><td><code>ledger/chain.jsonl</code></td><td>Action log + số lần bị guard chặn (Blocked)</td></tr>
+      <tr><td><code>telemetry/agentops.log</code></td><td>Usage events (token in/out, cost ước tính, model, trợ lý). Claude Code: resample từ transcript; <b>Codex</b>: đọc <code>~/.codex/sessions/…/rollout-*.jsonl</code> của đúng project lúc push (bundle ≥ 1.7.1)</td></tr>
+      <tr><td><code>ledger/chain.jsonl</code></td><td>Action log + số lần bị guard chặn (Blocked) — gửi <b>tăng dần</b> theo cursor, kèm "hình dạng" chuỗi (ledger anchor)</td></tr>
       <tr><td><code>telemetry/security-events.jsonl</code></td><td>Security incidents (prompt-injection, secret, guard block)</td></tr>
       <tr><td><code>telemetry/tool-calls.log</code></td><td>Thống kê tool calls</td></tr>
+      <tr><td><code>telemetry/test-reports.jsonl</code>, <code>pipeline-runs.jsonl</code></td><td>Test Report, Pipeline runs</td></tr>
+      <tr><td><code>ledger/bundles/*.json</code>, <code>buglist.md</code></td><td>Prompt Score (H3), Bug List / Common Bug</td></tr>
+      <tr><td>doctor, docscan, snapshot CASAN (tính lúc push, cần Python)</td><td>Fleet Health, Source/Doc, Harness Level</td></tr>
     </table></div>
   </section>
 
@@ -364,12 +389,13 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
     <ul>
       <li>Cột <b>Tokens</b>, <b>Cost</b>: số nhóm bằng dấu phẩy hàng nghìn; tiền làm tròn đô-la.</li>
       <li>Cột <b>Errors / Prompts / Blocked</b>: bấm vào số &gt; 0 → nhảy đúng tab chi tiết trong project.</li>
-      <li><b>Last sync</b> cập nhật sau mỗi lần push. Bấm <b>Sync now</b> trên Portal để ingest lại phía server.</li>
+      <li>Cột <b>Sync</b> (lần nhận telemetry gần nhất) cập nhật sau mỗi lần push; project chưa nhận gì hiện <i>no data</i>, cột <b>Trợ lý</b> hiện <i>chưa có dữ liệu</i> — nghĩa là chưa nhận telemetry, <b>không</b> phải "không dùng trợ lý". Bấm <b>Sync now</b> trên Portal để ingest lại phía server.</li>
     </ul>
     <div class="call warn"><b>“Sync 31d ago” không phải lỗi</b> nếu project đó thực sự lâu không chạy — token đến từ <i>transcript thật</i>, tool không bịa dữ liệu. Chạy lại project bằng Claude Code → phiên mới sẽ được sync lên.</div>
     <p>Kiểm tra nhanh 1 project vừa push:</p>
     <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\harness-sync.local.ps1
-<span class="cmt"># đọc dòng "OK &lt;project&gt; sessions=.. usage=.. actions=.." trả về từ server</span></pre></div>
+<span class="cmt"># đọc dòng "[&lt;project&gt;] [push-telemetry] OK: actions=.. incidents=.. usage=.. tool_calls=.." trả về từ server,</span>
+<span class="cmt"># và dòng tổng "[harness-sync] Done: N pushed, N idle, N not configured, N failed …"</span></pre></div>
   </section>
 
   <section id="s9">
@@ -386,32 +412,32 @@ powershell -File E:\SourceCode\HarnessAI-ToolKIT\install-push-scheduler.local.ps
     <h3>Trên Portal có phải làm gì không? — Không bắt buộc.</h3>
     <div class="tblwrap"><table>
       <tr><th>Tùy chọn</th><th>Cách bật</th></tr>
-      <tr><td>Cảnh báo qua <b>webhook/Slack</b> (ngoài email)</td><td>Thêm <code>ALERT_WEBHOOK_URL</code> vào <code>deploy.vars</code> → <code>docker compose … up -d backend</code></td></tr>
-      <tr><td>Bật <b>enforcement H4/H5</b> (chặn egress/deploy chờ duyệt)</td><td>Thêm <code>"pdp_enforce": true</code> vào <code>.harness\portal-sync.json</code> của project → hiện ở tab <b>Approvals</b></td></tr>
-      <tr><td>Duyệt hành động rủi ro cao</td><td>Vào tab <b>Approvals</b> → Approve / Reject</td></tr>
+      <tr><td>Cảnh báo qua <b>webhook/Slack</b> (ngoài email)</td><td>Thêm <code>ALERT_WEBHOOK_URL</code> vào <code>deploy.vars</code> <b>và</b> khai nó trong <code>services.backend.environment</code> của file override (vd <code>ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}</code>) — <code>docker-compose.yml</code> gốc không chuyển biến này vào container — rồi <code>docker compose … up -d backend</code>. Hoặc khai <code>agentops.webhook_url</code> trong <code>casan-policies.yaml</code> của project — chỉ có tác dụng khi server đọc được checkout đó qua <code>harness_root_ref</code>; project chỉ push từ máy dev thì dùng biến môi trường (biến môi trường thắng nếu có cả hai).</td></tr>
+      <tr><td>Bật <b>enforcement H4/H5</b> (chặn egress/deploy chờ duyệt)</td><td>Thêm <code>"pdp_enforce": true</code> vào <code>.harness\portal-sync.json</code> của project → hiện ở màn <b>Approvals</b> (menu trái, chỉ admin)</td></tr>
+      <tr><td>Duyệt hành động rủi ro cao</td><td>Vào màn <b>Approvals</b> (menu trái) → Approve / Reject</td></tr>
     </table></div>
   </section>
 
   <section id="upgrade">
     <h2><span class="num">10</span> Nâng cấp bundle cho TẤT CẢ project</h2>
-    <p class="lead">Khi có bản bundle mới (vd v1.4.1) — cài đè lên mọi project một lượt. <b>An toàn:</b> không đụng <code>portal-sync.key</code> đã dán.</p>
+    <p class="lead">Khi có bản bundle mới — cài đè lên mọi project một lượt bằng <code>update-all-projects.ps1</code>. <b>An toàn:</b> không đụng <code>portal-sync.json</code> / <code>portal-sync.key</code> đã điền.</p>
     <div class="code"><button class="copy">Copy</button><pre><span class="cmt"># cập nhật toolkit rồi cài đè bản mới nhất vào mọi project đã onboard</span>
 cd E:\SourceCode\HarnessAI-ToolKIT; git pull
-$Bundle  = Get-ChildItem "E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\*.bundle.json" |
-           Sort-Object Name | Select-Object -Last 1
-$Install = "E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1"
-Get-ChildItem E:\SourceCode -Directory |
-  Where-Object { $_.Name -notin @('HarnessAI-ToolKIT','Harness-ToolKIT') -and (Test-Path "$($_.FullName)\.harness") } |
-  ForEach-Object {
-    Write-Host "==== $($_.Name) ====" -ForegroundColor Cyan
-    &amp; $Install -BundleFile $Bundle.FullName -TargetDir $_.FullName -Force -MergeClaude
-  }</pre></div>
-    <div class="call ok"><b>Idempotent:</b> <code>-Force</code> chỉ ghi đè file bundle (hooks/scripts/policies), giữ nguyên <code>portal-sync.json</code>/<code>.key</code>. Chạy lại bao nhiêu lần cũng được. Xong thì mở lại Claude ở project → hook mới chạy, telemetry mới sync, điểm tự cập nhật.</div>
+<span class="cmt"># xem trước, không ghi gì</span>
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\update-all-projects.ps1 -WhatIf
+<span class="cmt"># chạy thật</span>
+powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\update-all-projects.ps1</pre></div>
+    <ul>
+      <li>Chọn bundle theo <b>số version</b> (không theo tên file hay ngày file — sắp theo tên thì <code>1.6.9</code> đứng sau <code>1.6.20</code>).</li>
+      <li>Tìm mọi project có <code>.harness\</code> dưới <code>-BaseDir</code> (mặc định <code>E:\SourceCode</code>), kể cả repo nằm trong thư mục chứa; bỏ qua chính repo toolkit.</li>
+      <li>So <code>content_hash</code> với receipt của từng project, in bảng project | bản cũ | bản mới | trạng thái. <code>-Reinstall</code> để cài lại dù cùng version.</li>
+    </ul>
+    <div class="call ok"><b>Idempotent:</b> cài với <code>-Force -MergeClaude</code>, chỉ ghi đè file bundle (hooks/scripts/policies), giữ nguyên <code>portal-sync.json</code>/<code>.key</code>. Chạy lại bao nhiêu lần cũng được. Xong thì mở lại Claude ở project → hook mới chạy, telemetry mới sync, điểm tự cập nhật.</div>
   </section>
 
   <section id="approvals">
     <h2><span class="num">11</span> Approvals — duyệt hành động rủi ro cao (H5)</h2>
-    <p class="lead">Khi project bật <code>"pdp_enforce": true</code>, các hành động rủi ro cao (deploy / ghi DB / đổi khoá / egress lạ) bị PDP giữ lại → hiện ở tab <b>Approvals</b> chờ bạn quyết định. Agent bị chặn tới khi có quyết định.</p>
+    <p class="lead">Khi project bật <code>"pdp_enforce": true</code>, các hành động rủi ro cao (deploy / ghi DB / đổi khoá / egress lạ) bị PDP giữ lại → hiện ở màn <b>Approvals</b> (menu trái, chỉ admin — không phải một tab trong Project) chờ bạn quyết định. Agent bị chặn tới khi có quyết định.</p>
     <div class="tblwrap"><table>
       <tr><th>Cột</th><th>Ý nghĩa</th></tr>
       <tr><td><b>#</b></td><td>Số thứ tự dòng (theo sắp xếp hiện tại)</td></tr>
@@ -428,7 +454,7 @@ Get-ChildItem E:\SourceCode -Directory |
       <li>Mọi quyết định ghi kèm <b>tên người duyệt</b> (audit, C9).</li>
     </ul>
     <div class="call note"><b>Bật/tắt enforcement:</b> sửa <code>.harness\portal-sync.json</code> field <code>pdp_enforce</code>, hoặc chạy
-      <code>set-pdp-enforce.ps1</code> (bật tất cả) / <code>-Enforce:$false</code> (tắt). Mặc định TẮT — không cản trở khi chưa cần.</div>
+      <code>set-pdp-enforce.ps1</code> (bật tất cả) / tắt: <code>powershell -NoProfile -Command "&amp; '…\set-pdp-enforce.ps1' -Enforce:`$false"</code> — <b>không</b> dùng <code>-File</code> để tắt: <code>-Enforce</code> là <code>[bool]</code>, và qua <code>-File</code> PowerShell 5.1 không đổi được chuỗi sang bool (<code>-Enforce:$false</code> hay <code>-Enforce 0</code> đều dừng với <code>ParameterArgumentTransformationError</code>, chưa đổi gì) / <code>-Only "ProjectA,ProjectB"</code> hoặc <code>-Exclude …</code> (chỉ một số project) / <code>-WhatIf</code> (xem trước). Mặc định TẮT — không cản trở khi chưa cần. PDP là defense-in-depth: lỗi mạng tới Portal thì hook <b>cho qua</b> (fail-open, C10).</div>
   </section>
 
   <section id="newproj">
@@ -438,15 +464,19 @@ Get-ChildItem E:\SourceCode -Directory |
       <li><b>Trên Portal (Admin):</b> Projects → New project → copy <b>Project ID</b> + <b>ingest key</b> (Settings → Reveal).</li>
       <li><b>Cài bundle</b> vào thư mục project:
         <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\install.ps1 `
-  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.2.7.bundle.json `
+  -BundleFile E:\SourceCode\HarnessAI-ToolKIT\bundles\standard-governance\standard-governance-1.8.0.bundle.json `
   -TargetDir E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span> -Force -MergeClaude</pre></div>
+        Hoặc gộp bước 2–4 bằng một lệnh (cài bundle bản mới nhất + ghi config + key + push thử; <code>-PortalUrl</code> bắt buộc):
+        <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\HarnessAI-ToolKIT\tools\harness-bundle\setup-portal-sync.ps1 `
+  -ProjectDir E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span> -ProjectId <span class="tok">&lt;PROJECT_ID&gt;</span> -IngestKey <span class="tok">&lt;KEY&gt;</span> `
+  -PortalUrl https://<span class="tok">YOUR-PORTAL-DOMAIN</span></pre></div>
       </li>
       <li><b>Điền 2 file sync</b> (install ở bước trên đã tạo sẵn trong <code>.harness\</code>): mở <span class="path">portal-sync.json</span> điền <code>portal_url</code> + <code>project_id</code>; mở <span class="path">portal-sync.key</span> dán ingest key.</li>
-      <li><b>Push lần đầu</b> (hoặc chờ scheduled task tự chạy):
-        <div class="code"><button class="copy">Copy</button><pre>powershell -File "$proj\.harness\scripts\powershell\push-telemetry.ps1"</pre></div>
+      <li><b>Push lần đầu</b> (hoặc chờ hook SessionEnd / scheduled task nếu máy có):
+        <div class="code"><button class="copy">Copy</button><pre>powershell -File E:\SourceCode\<span class="tok">&lt;NewProject&gt;</span>\.harness\scripts\powershell\push-telemetry.ps1</pre></div>
       </li>
     </ol>
-    <div class="call ok"><b>Không cần sửa <code>harness-sync.local.ps1</code></b>: lần chạy sau nó tự phát hiện project mới nhờ 2 file <code>portal-sync.*</code>. Scheduled task cũng tự cuốn theo. <b>Không lặp lại lỗi mất sync.</b></div>
+    <div class="call ok"><b>Không cần sửa <code>harness-sync.local.ps1</code></b>: lần chạy sau nó tự phát hiện project mới nhờ file <code>.harness\portal-sync.json</code> (có mặt là được chọn; <code>install.ps1</code> tạo sẵn file này với placeholder). Nhưng chỉ <b>đẩy được</b> khi <code>portal_url</code>/<code>project_id</code> đã điền và <code>portal-sync.key</code> có key — thiếu thì driver đếm project đó là <i>not configured</i>, không đẩy gì. Scheduled task cũng tự cuốn theo. <b>Không lặp lại lỗi mất sync.</b></div>
   </section>
 
   <section id="tshoot">
@@ -455,10 +485,13 @@ Get-ChildItem E:\SourceCode -Directory |
       <tr><th>Triệu chứng</th><th>Nguyên nhân &amp; xử lý</th></tr>
       <tr><td>Push báo <code>No portal-sync.json</code></td><td>Chưa tạo file cấu hình → làm <a href="#s3">bước 3</a>.</td></tr>
       <tr><td><code>No ingest key</code></td><td><code>portal-sync.key</code> rỗng → dán key từ Portal (Settings → Reveal), hoặc set env <code>HARNESS_PORTAL_INGEST_KEY</code>.</td></tr>
-      <tr><td>Push <code>403 Forbidden</code></td><td>Sai ingest key (đã rotate?) → Reveal lại &amp; dán key mới. Hoặc project_id sai.</td></tr>
-      <tr><td>Token = 0 dù đã chạy Claude</td><td>Chạy <code>harness-sync.local.ps1</code> (resample từ transcript). Cần Python 3 trên máy.</td></tr>
+      <tr><td>Push <code>401 Unauthorized</code> ("Invalid project or ingest key")</td><td>Sai ingest key (đã rotate?) → Reveal lại &amp; dán key mới. Hoặc project_id sai.</td></tr>
+      <tr><td>Push <code>403 Forbidden</code></td><td>Thường là CDN/WAF chặn trước khi tới Portal. push-telemetry gửi User-Agent riêng (<code>harness-push-telemetry/1.0</code>) — kiểm rule WAF của domain Portal.</td></tr>
+      <tr><td><code>portal_url is still the installer placeholder</code></td><td><code>portal-sync.json</code> còn <code>YOUR-PORTAL-DOMAIN</code> → điền URL Portal thật (bước 3).</td></tr>
+      <tr><td>Push lỗi kèm <code>server said: …</code></td><td>Đọc phần sau <code>server said:</code> — backend nói rõ trường nào sai (vd 422). Chạy lại an toàn: server tự dedupe.</td></tr>
+      <tr><td>Token = 0 dù đã chạy Claude</td><td>Chạy <code>push-telemetry.ps1</code> của project (tự resample transcript trước khi push) — hoặc <code>harness-sync.local.ps1</code> nếu máy có. Cần Python 3 trên máy.</td></tr>
       <tr><td>Lệnh của bạn bị guard chặn bất ngờ</td><td>Command trùng deny-pattern. Đổi từ, hoặc dùng <code>git commit -F file</code>. Lưu ý: guard chỉ soi lệnh shell — không soi nội dung file Write/Edit.</td></tr>
-      <tr><td>Portal không lên (docker)</td><td><code>docker compose logs backend</code>; kiểm tra <code>.env</code> đủ secret; port/health.</td></tr>
+      <tr><td>Portal không lên (docker)</td><td><code>docker compose logs backend</code>; kiểm tra <code>.env</code> đủ secret (compose báo "… is required" nếu thiếu <code>POSTGRES_PASSWORD</code>/<code>PORTAL_MASTER_KEY</code>/<code>JWT_SECRET</code>/<code>SETUP_GATE_KEY</code>); "Refusing to start in environment='production'" = còn secret mặc định; migration lỗi cũng làm backend không lên; port/health.</td></tr>
     </table></div>
   </section>
 
@@ -466,7 +499,7 @@ Get-ChildItem E:\SourceCode -Directory |
 </div>
 
 <footer>
-  AI Software Development Harness · standard-governance v1.2.7 · Hooks &gt; rules · Execution ≠ control · No false safety.
+  AI Software Development Harness · standard-governance v1.8.0 · Hooks &gt; rules · Execution ≠ control · No false safety.
   <br/>© 2026 Dau Sy Manh (manhds@). Tài liệu nội bộ — thay các placeholder bằng giá trị thật của bạn trước khi dùng.
 </footer>
 
